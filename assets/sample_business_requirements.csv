@@ -1,0 +1,3 @@
+requirement_id,priority,target_model,change_type,description,source_field,notes
+BR-001,High,weekly_truck_performance,new_column,"Add a boolean flag indicating whether the order fell on a weekend",order_header.order_ts,"Weekend = Saturday or Sunday based on order_ts. Confirm timezone assumption with business."
+BR-002,Medium,weekly_truck_performance,new_metric,"Add a discount percentage metric: total discount amount as a percentage of gross order total",order_detail.order_item_discount_amount / order_header.order_amount,"order_item_discount_amount is currently typed as VARCHAR in RAW - needs a cast. Flag as an open question for the change plan."
