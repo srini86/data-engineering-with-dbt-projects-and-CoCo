@@ -96,16 +96,6 @@ This creates:
 - Warehouse `NZBANK_WH` (XSmall, auto-suspend)
 - Eight source tables in `RAW` loaded from Snowflake's public Tasty Bytes dataset (`country`, `franchise`, `location`, `menu`, `truck`, `order_header`, `order_detail`, `customer_loyalty`)
 
-### Step 3: Pull the dbt Project into a Workspace
-
-1. In **Projects > Workspaces**, click the Workspace dropdown → **Create Workspace From Git Repository**
-2. Repository URL: `https://github.com/Snowflake-Labs/getting-started-with-dbt-on-snowflake.git`
-3. Workspace Name: `NZBANK_dbt_Workspace`
-4. Select **Public Repository**
-5. Click **Create**
-
-No `git clone`, no terminal — Snowsight pulls the repo directly into a browser-based Workspace. (Public repos are pull-only in a Workspace; that's fine for this lab since you're not pushing changes back.)
-
 ### Validate
 
 ```sql
@@ -116,6 +106,27 @@ SELECT COUNT(*) FROM NZBANK_HOL.RAW.ORDER_HEADER;
 ```
 
 You should see all 8 source tables with data loaded.
+
+### Step 3: Pull the dbt Project into a Workspace
+
+1. In **Projects > Workspaces**, click the 'Create Workspace' (+) button → Create new **Git Workspace**
+2. Repository URL: `https://github.com/Snowflake-Labs/getting-started-with-dbt-on-snowflake.git`
+3. Workspace Name: `NZBANK_dbt_Workspace`
+4. API Integration: `public_git_api`
+4. Select **Public Repository**
+5. Click **Create**
+
+No `git clone`, no terminal — Snowsight pulls the repo directly into a browser-based Workspace. (Public repos are pull-only in a Workspace; that's fine for this lab since you're not pushing changes back.)
+
+### Step 4: Update `profiles.yml`
+
+The dbt project from the Snowflake-Labs repo ships with default database/warehouse names that don't match this lab. Open `profiles.yml` in the Workspace and update:
+
+- `database:` → `NZBANK_HOL`
+- `warehouse:` → `NZBANK_WH`
+- `schema:` → `DEV` (for the dev target) and `PROD` (for the prod target)
+
+Save the file. This ensures all dbt commands run against the objects you created in Step 2.
 
 ### Customer Q&A
 
@@ -167,7 +178,7 @@ Toggle **Plan Mode** in the CoCo panel — this makes CoCo think through a multi
 Using the dbt project in this workspace, create a model called
 weekly_truck_performance in models/marts. Using order_header, order_detail,
 menu, and truck, calculate total revenue, total orders, and average order
-value by truck and month. Add schema.yml tests: not_null and unique on the
+value by truck, truck brand and week. Add schema.yml tests: not_null and unique on the
 key columns, and accepted_values where relevant.
 ```
 
@@ -252,9 +263,7 @@ SHOW DBT PROJECTS IN SCHEMA NZBANK_HOL.PROD;
 
 ### Step 2: Schedule with a Task and Alert
 
-From the dbt project's **Project Details** page in Snowsight, click **Create Schedule**:
-- Frequency: daily
-- Operation: `run`, then a second schedule for `test` chained after it
+Open [`assets/task_and_alert.sql`](assets/task_and_alert.sql) in a SQL worksheet. Before running, replace `<YOUR EMAIL HERE>` in the alert section.
 
 Or ask CoCo:
 
@@ -263,9 +272,15 @@ Create a Snowflake Task that runs NZBANK_DBT_PROJECT daily at 6am, followed by
 a test run, and sends a failure alert.
 ```
 
-The full reference SQL (Task DAG + failure alert) is in [`assets/task_and_alert.sql`](assets/task_and_alert.sql).
+If you prefer to run the code yourself, run all statements in [`assets/task_and_alert.sql`](assets/task_and_alert.sql). This creates:
 
-> Tasks that run dbt projects require a user-managed warehouse — serverless tasks aren't supported for this.
+1. A **run** task (`NZBANK_RUN_DBT_TASK`) scheduled daily at 06:00 UTC
+2. A **test** task (`NZBANK_TEST_DBT_TASK`) chained to execute only after the run task succeeds
+3. A failure **alert** that emails you when either task fails
+
+The two tasks use an `AFTER` dependency so that tests never run against stale models. `EXECUTE DBT PROJECT` does not support the `build` subcommand, which is why `run` and `test` are issued as separate chained tasks.
+
+> **Note:** The Snowsight UI (**Project Details > Create Schedule**) can create individual scheduled tasks, but does not support the `AFTER` chaining required here. Use SQL for this step.
 
 ### Step 3: Monitor — Snowsight Is the Operations Console
 
@@ -419,11 +434,9 @@ A: It gives every consumer (Cortex Analyst, Cortex Agents, and — depending on 
 
 **Business Context:** Bundled skills (like `dbt-projects-on-snowflake`) cover generic mechanics. Kiwibank's actual change process is more specific: a requirements document comes in, and it needs to become a reviewed dbt change plan. That's exactly the kind of repeatable pattern worth encoding as a **custom** skill, rather than re-explaining the same conventions to CoCo every time.
 
-### Step 1: Get the Sample Requirements File
+### Step 1: Define the Custom Skill
 
-Use [`assets/sample_business_requirements.csv`](assets/sample_business_requirements.csv) — a small requirements doc requesting two changes to `weekly_truck_performance`: a new `is_weekend_order` flag and a `discount_pct` metric.
-
-### Step 2: Define the Custom Skill
+In the CoCo panel, enter the following prompt to create the skill:
 
 ```
 Walk me through building a custom CoCo skill called dbt-change-plan.
@@ -437,13 +450,15 @@ always return, in this order:
 Make it a project skill.
 ```
 
-**What to look for:** a skill definition that fixes the *shape* of the output, not just a one-off prompt — the point is that every future requirements file gets the same five-part answer, so changes are comparable across reviews.
+CoCo will generate the skill definition and save it directly — no file upload or CLI needed. The skill is stored at `.snowflake/cortex/skills/dbt-change-plan/SKILL.md` and is immediately available.
 
-### Step 3: Upload and Use It
+**What to look for:** A skill definition that fixes the *shape* of the output, not just a one-off prompt — the point is that every future requirements file gets the same five-part answer, so changes are comparable across reviews.
 
-1. Click the **+** icon in the CoCo panel → **Upload skill folder(s)**
-2. Browse to the skill folder CoCo generated, select the folder (not a zip), upload
-3. Confirm it's loaded: type `/dbt-change-plan` and check it appears
+### Step 2: Use the Skill
+
+Confirm the skill is loaded by typing `/dbt-change-plan` in the CoCo panel — it should appear in the autocomplete list.
+
+Attach [`assets/sample_business_requirements.csv`](assets/sample_business_requirements.csv) to the CoCo chat using the attachment icon (paperclip). This is a small requirements doc requesting two changes to `weekly_truck_performance`: a new `is_weekend_order` flag and a `discount_pct` metric.
 
 Then run it:
 
@@ -452,7 +467,7 @@ Run the dbt-change-plan skill on assets/sample_business_requirements.csv
 against weekly_truck_performance.
 ```
 
-Review the 5-part output, then apply the change and click **Keep All**.
+Review the 5-part output. CoCo will read the CSV, map each requirement to the target model, and produce the full change plan. Once you're satisfied, apply the suggested changes and click **Keep All**.
 
 ### Customer Q&A
 
@@ -460,7 +475,10 @@ Review the 5-part output, then apply the change and click **Keep All**.
 A: A regular prompt gives you a plausible one-off answer. A skill gives you the *same* five-section shape every time, from any engineer, for any requirements file — which is what makes outputs comparable across reviews and change plans.
 
 **Q: Where does this skill live — is it shared with the team?**
-A: Project skills live in `.cortex/skills/` inside the dbt project's Git repo, so anyone who works in that Workspace gets the same skill. (Bundled skills, by contrast, ship with CoCo itself and need no upload at all — that's why `dbt-projects-on-snowflake` never needed this step.)
+A: Project skills live in `.snowflake/cortex/skills/` inside the Workspace. In Snowsight, CoCo creates the skill directly when you define it — no upload step required. For team sharing, commit the skill file to the dbt project's Git repo so anyone who works in that Workspace gets the same skill.
+
+**Q: Do I need to upload or install anything to use the skill?**
+A: No. In Snowsight, CoCo saves the skill the moment you define it. The `/dbt-change-plan` command is available immediately. (If you were using CoCo Desktop instead, you would need to place the skill file in the local `.snowflake/cortex/skills/` directory.)
 
 ---
 
