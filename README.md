@@ -1,6 +1,6 @@
 # Data Engineering with dbt Projects on Snowflake and CoCo
 
-> A hands-on lab for Kiwibank engineers. ~1 hour, entirely inside Snowsight — **no CLI, no local install, no terminal**. CoCo (Cortex Code) is accessed via the blue star icon in Snowsight itself.
+> A hands-on lab for data engineers. ~1 hour, entirely inside Snowsight — **no CLI, no local install, no terminal**. CoCo (Cortex Code) is accessed via the blue star icon in Snowsight itself.
 >
 > This lab is about **dbt Projects on Snowflake**, driven by CoCo. 
 
