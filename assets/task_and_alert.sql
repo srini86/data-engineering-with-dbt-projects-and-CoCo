@@ -41,6 +41,15 @@ ALTER TASK NZBANK_HOL.PROD.NZBANK_RUN_DBT_TASK RESUME;
 EXECUTE TASK NZBANK_HOL.PROD.NZBANK_RUN_DBT_TASK;
 
 -- ----------------------------------------------------------------------
+-- Notification Integration: required for the alert to send emails.
+-- Replace <YOUR EMAIL HERE> with your verified Snowsight email address.
+-- ----------------------------------------------------------------------
+CREATE NOTIFICATION INTEGRATION IF NOT EXISTS NZBANK_EMAIL_NOTIFICATIONS
+    TYPE = EMAIL
+    ENABLED = TRUE
+    ALLOWED_RECIPIENTS = ('<YOUR EMAIL HERE>');
+
+-- ----------------------------------------------------------------------
 -- Alert: notify on test failure.
 -- NOTE: verify your email in Snowsight first (user icon > Profile > email),
 -- and replace <YOUR EMAIL HERE> below before running.
@@ -82,3 +91,11 @@ ALTER ALERT NZBANK_HOL.PROD.NZBANK_DBT_ALERT RESUME;
 
 -- Run once to confirm the alert fires correctly against current history
 EXECUTE ALERT NZBANK_HOL.PROD.NZBANK_DBT_ALERT;
+
+-- Optional check for alert task history
+SELECT *
+FROM TABLE(NZBANK_HOL.INFORMATION_SCHEMA.ALERT_HISTORY(
+    ALERT_NAME => 'NZBANK_DBT_ALERT',
+    SCHEDULED_TIME_RANGE_START => DATEADD('hour', -1, CURRENT_TIMESTAMP())
+))
+ORDER BY SCHEDULED_TIME DESC;
