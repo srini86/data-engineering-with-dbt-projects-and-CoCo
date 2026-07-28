@@ -148,6 +148,8 @@ CoCo will create:
 1. **Network Rule:** `NZBANK_HOL.PUBLIC.DBT_DEPS_NETWORK_RULE` — allows egress to `hub.getdbt.com` and `codeload.github.com`
 2. **External Access Integration:** `DBT_DEPS_EAI` — enables the network rule
 
+> **Note:** If you receive an error stating that External Access Integrations are not enabled for trial accounts, ask an instructor for help — they may need to manually enable this feature for your account.
+
 ### Customer Q&A
 
 **Q: Why Tasty Bytes and not our own banking data?**
