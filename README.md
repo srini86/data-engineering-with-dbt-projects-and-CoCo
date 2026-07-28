@@ -112,9 +112,15 @@ You should see all 8 source tables with data loaded.
 1. In **Projects > Workspaces**, click the 'Create Workspace' (+) button → Create new **Git Workspace**
 2. Repository URL: `https://github.com/Snowflake-Labs/getting-started-with-dbt-on-snowflake.git`
 3. Workspace Name: `NZBANK_dbt_Workspace`
-4. API Integration: `public_git_api`
-4. Select **Public Repository**
-5. Click **Create**
+4. If you see "No API integration available", click **+ API Integration** and fill in:
+   - **Name:** `github`
+   - **Allowed prefixes:** `https://github.com`
+   - **Allowed authentication secrets:** All
+   - **OAuth authentication:** leave unchecked
+   - Click **Create**
+5. Select the `github` API integration
+6. Select **Public Repository**
+7. Click **Create**
 
 No `git clone`, no terminal — Snowsight pulls the repo directly into a browser-based Workspace. (Public repos are pull-only in a Workspace; that's fine for this lab since you're not pushing changes back.)
 
@@ -127,6 +133,20 @@ The dbt project from the Snowflake-Labs repo ships with default database/warehou
 - `schema:` → `DEV` (for the dev target) and `PROD` (for the prod target)
 
 Save the file. This ensures all dbt commands run against the objects you created in Step 2.
+
+### Step 5: Create an External Access Integration for dbt Packages
+
+Later in the lab, CoCo will run `dbt deps` to install packages from `hub.getdbt.com` and `codeload.github.com`. This requires an External Access Integration. Create one now so it's ready when needed.
+
+In the CoCo panel, enter:
+
+```
+Create an External Access Integration inside the NZBANK_HOL database called DBT_DEPS_EAI so I can run dbt deps, read the documentation
+```
+
+CoCo will create:
+1. **Network Rule:** `NZBANK_HOL.PUBLIC.DBT_DEPS_NETWORK_RULE` — allows egress to `hub.getdbt.com` and `codeload.github.com`
+2. **External Access Integration:** `DBT_DEPS_EAI` — enables the network rule
 
 ### Customer Q&A
 
@@ -263,16 +283,9 @@ SHOW DBT PROJECTS IN SCHEMA NZBANK_HOL.PROD;
 
 ### Step 2: Schedule with a Task and Alert
 
-Open [`assets/task_and_alert.sql`](assets/task_and_alert.sql) in a SQL worksheet. Before running, replace `<YOUR EMAIL HERE>` in the alert section.
+Open [`assets/task_and_alert.sql`](assets/task_and_alert.sql) in a SQL worksheet. Before running, replace `<YOUR EMAIL HERE>` in both the notification integration and the alert section with your verified Snowsight email address (verify under user icon > Profile if you haven't already).
 
-Or ask CoCo:
-
-```
-Create a Snowflake Task that runs NZBANK_DBT_PROJECT daily at 6am, followed by
-a test run, and sends a failure alert.
-```
-
-If you prefer to run the code yourself, run all statements in [`assets/task_and_alert.sql`](assets/task_and_alert.sql). This creates:
+After updating your email in the SQL script, run all statements in [`assets/task_and_alert.sql`](assets/task_and_alert.sql). This creates:
 
 1. A **run** task (`NZBANK_RUN_DBT_TASK`) scheduled daily at 06:00 UTC
 2. A **test** task (`NZBANK_TEST_DBT_TASK`) chained to execute only after the run task succeeds
