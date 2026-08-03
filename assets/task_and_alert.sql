@@ -6,55 +6,45 @@
 -- dbt project's Project Details page in Snowsight -- this file is the SQL
 -- that button generates, kept here for reference and for the CI/CD mapping
 -- discussion (this is exactly what your AWS CodePipeline step would run).
--- Adapted from https://www.snowflake.com/en/developers/guides/dbt-projects-on-snowflake/
+-- Adapted from https://github.com/Snowflake-Labs/getting-started-with-dbt-on-snowflake
 -- ============================================================================
 
 USE ROLE ACCOUNTADMIN;
-USE WAREHOUSE NZBANK_WH;
+USE WAREHOUSE tasty_bytes_dbt_wh;
 
 -- ----------------------------------------------------------------------
--- Task 1: Run the dbt project daily at 06:00 UTC
+-- Task: Build (run + test) the dbt project daily at 06:00 UTC
+-- `build` runs models and tests in DAG order, failing early if any test fails.
 -- ----------------------------------------------------------------------
-CREATE OR ALTER TASK NZBANK_HOL.PROD.NZBANK_RUN_DBT_TASK
-    WAREHOUSE = NZBANK_WH
+ALTER TASK IF EXISTS tasty_bytes_dbt_db.prod.tb_dbt_build_task SUSPEND;
+
+CREATE OR ALTER TASK tasty_bytes_dbt_db.prod.tb_dbt_build_task
+    WAREHOUSE = tasty_bytes_dbt_wh
     SCHEDULE = 'USING CRON 0 6 * * * UTC'
 AS
-    EXECUTE DBT PROJECT NZBANK_HOL.PROD.NZBANK_DBT_PROJECT
-        ARGS = 'run --target prod';
+    EXECUTE DBT PROJECT tasty_bytes_dbt_db.prod.tasty_bytes_dbt_project
+        ARGS = 'build --target prod';
 
--- ----------------------------------------------------------------------
--- Task 2: Test run, chained after Task 1 completes
--- ----------------------------------------------------------------------
-CREATE OR ALTER TASK NZBANK_HOL.PROD.NZBANK_TEST_DBT_TASK
-    WAREHOUSE = NZBANK_WH
-    AFTER NZBANK_HOL.PROD.NZBANK_RUN_DBT_TASK
-AS
-    EXECUTE DBT PROJECT NZBANK_HOL.PROD.NZBANK_DBT_PROJECT
-        ARGS = 'test --target prod';
+ALTER TASK tasty_bytes_dbt_db.prod.tb_dbt_build_task RESUME;
 
--- Tasks are created suspended. Resume the child before the root.
-ALTER TASK NZBANK_HOL.PROD.NZBANK_TEST_DBT_TASK RESUME;
-ALTER TASK NZBANK_HOL.PROD.NZBANK_RUN_DBT_TASK RESUME;
-
--- Run once immediately to confirm the chain works, rather than waiting
--- for the next scheduled window.
-EXECUTE TASK NZBANK_HOL.PROD.NZBANK_RUN_DBT_TASK;
+-- Run once immediately to confirm the task works
+EXECUTE TASK tasty_bytes_dbt_db.prod.tb_dbt_build_task;
 
 -- ----------------------------------------------------------------------
 -- Notification Integration: required for the alert to send emails.
 -- Replace <YOUR EMAIL HERE> with your verified Snowsight email address.
 -- ----------------------------------------------------------------------
-CREATE NOTIFICATION INTEGRATION IF NOT EXISTS NZBANK_EMAIL_NOTIFICATIONS
+CREATE NOTIFICATION INTEGRATION IF NOT EXISTS tb_dbt_email_notifications
     TYPE = EMAIL
     ENABLED = TRUE
     ALLOWED_RECIPIENTS = ('<YOUR EMAIL HERE>');
 
 -- ----------------------------------------------------------------------
--- Alert: notify on test failure.
+-- Alert: notify on task failure.
 -- NOTE: verify your email in Snowsight first (user icon > Profile > email),
 -- and replace <YOUR EMAIL HERE> below before running.
 -- ----------------------------------------------------------------------
-CREATE OR REPLACE ALERT NZBANK_HOL.PROD.NZBANK_DBT_ALERT
+CREATE OR REPLACE ALERT tasty_bytes_dbt_db.prod.tb_dbt_alert
     SCHEDULE = '60 MINUTE'
     IF (EXISTS (
         SELECT NAME, SCHEMA_NAME
@@ -66,7 +56,7 @@ CREATE OR REPLACE ALERT NZBANK_HOL.PROD.NZBANK_DBT_ALERT
             SCHEDULED_TIME_RANGE_END => SNOWFLAKE.ALERT.SCHEDULED_TIME(),
             ERROR_ONLY => TRUE
         ))
-        WHERE DATABASE_NAME = 'NZBANK_HOL'
+        WHERE DATABASE_NAME = 'TASTY_BYTES_DBT_DB'
     ))
     THEN
         BEGIN
@@ -76,26 +66,26 @@ CREATE OR REPLACE ALERT NZBANK_HOL.PROD.NZBANK_DBT_ALERT
             );
             CALL SYSTEM$SEND_SNOWFLAKE_NOTIFICATION(
                 SNOWFLAKE.NOTIFICATION.TEXT_HTML(
-                    'Tasks ' || :failed_tasks || ' failed in NZBANK_HOL since ' ||
+                    'Tasks ' || :failed_tasks || ' failed in TASTY_BYTES_DBT_DB since ' ||
                     (GREATEST(TIMEADD('day', -1, CURRENT_TIMESTAMP()), SNOWFLAKE.ALERT.LAST_SUCCESSFUL_SCHEDULED_TIME()))
                 ),
                 SNOWFLAKE.NOTIFICATION.EMAIL_INTEGRATION_CONFIG(
-                    'NZBANK_EMAIL_NOTIFICATIONS',
-                    'NZBANK dbt Pipeline Alert',
+                    'TB_DBT_EMAIL_NOTIFICATIONS',
+                    'dbt Pipeline Alert',
                     ARRAY_CONSTRUCT('<YOUR EMAIL HERE>')
                 )
             );
         END;
 
-ALTER ALERT NZBANK_HOL.PROD.NZBANK_DBT_ALERT RESUME;
+ALTER ALERT tasty_bytes_dbt_db.prod.tb_dbt_alert RESUME;
 
 -- Run once to confirm the alert fires correctly against current history
-EXECUTE ALERT NZBANK_HOL.PROD.NZBANK_DBT_ALERT;
+EXECUTE ALERT tasty_bytes_dbt_db.prod.tb_dbt_alert;
 
 -- Optional check for alert task history
 SELECT *
-FROM TABLE(NZBANK_HOL.INFORMATION_SCHEMA.ALERT_HISTORY(
-    ALERT_NAME => 'NZBANK_DBT_ALERT',
+FROM TABLE(tasty_bytes_dbt_db.INFORMATION_SCHEMA.ALERT_HISTORY(
+    ALERT_NAME => 'TB_DBT_ALERT',
     SCHEDULED_TIME_RANGE_START => DATEADD('hour', -1, CURRENT_TIMESTAMP())
 ))
 ORDER BY SCHEDULED_TIME DESC;

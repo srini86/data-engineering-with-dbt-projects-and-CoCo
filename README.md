@@ -92,17 +92,17 @@ What databases do I have access to?
 4. Click **Run All**
 
 This creates:
-- Database `NZBANK_HOL` with schemas `RAW`, `DEV`, `PROD`
-- Warehouse `NZBANK_WH` (XSmall, auto-suspend)
+- Database `tasty_bytes_dbt_db` with schemas `RAW`, `DEV`, `PROD`
+- Warehouse `tasty_bytes_dbt_wh` (XSmall, auto-suspend)
 - Eight source tables in `RAW` loaded from Snowflake's public Tasty Bytes dataset (`country`, `franchise`, `location`, `menu`, `truck`, `order_header`, `order_detail`, `customer_loyalty`)
 
 ### Validate
 
 ```sql
 USE ROLE ACCOUNTADMIN;
-USE WAREHOUSE NZBANK_WH;
-SHOW TABLES IN SCHEMA NZBANK_HOL.RAW;
-SELECT COUNT(*) FROM NZBANK_HOL.RAW.ORDER_HEADER;
+USE WAREHOUSE tasty_bytes_dbt_wh;
+SHOW TABLES IN SCHEMA tasty_bytes_dbt_db.RAW;
+SELECT COUNT(*) FROM tasty_bytes_dbt_db.RAW.ORDER_HEADER;
 ```
 
 You should see all 8 source tables with data loaded.
@@ -111,7 +111,7 @@ You should see all 8 source tables with data loaded.
 
 1. In **Projects > Workspaces**, click the 'Create Workspace' (+) button → Create new **Git Workspace**
 2. Repository URL: `https://github.com/Snowflake-Labs/getting-started-with-dbt-on-snowflake.git`
-3. Workspace Name: `NZBANK_dbt_Workspace`
+3. Workspace Name: `tasty_bytes_dbt_workspace`
 4. If you see "No API integration available", click **+ API Integration** and fill in:
    - **Name:** `github`
    - **Allowed prefixes:** `https://github.com`
@@ -128,8 +128,8 @@ No `git clone`, no terminal — Snowsight pulls the repo directly into a browser
 
 The dbt project from the Snowflake-Labs repo ships with default database/warehouse names that don't match this lab. Open `profiles.yml` in the Workspace and update:
 
-- `database:` → `NZBANK_HOL`
-- `warehouse:` → `NZBANK_WH`
+- `database:` → `tasty_bytes_dbt_db`
+- `warehouse:` → `tasty_bytes_dbt_wh`
 - `schema:` → `DEV` (for the dev target) and `PROD` (for the prod target)
 
 Save the file. This ensures all dbt commands run against the objects you created in Step 2.
@@ -166,7 +166,7 @@ What does the dbt-projects-on-snowflake skill do?
 ### Step 2: Discover the Source Data
 
 ```
-Find all tables in NZBANK_HOL.RAW and give me a one-line description of each.
+Find all tables in tasty_bytes_dbt_db.RAW and give me a one-line description of each.
 ```
 
 ```
@@ -195,14 +195,14 @@ Proceed with the plan. Create the model and schema.yml files, then run dbt
 build and validate the output row count.
 ```
 
-> **Tip:** When CoCo runs `dbt deps` or `dbt build`, you may be prompted to select an External Access Integration. Choose **`DBT_DEPS_EAI`** (created by the setup script) and click **Confirm**.
+> **Tip:** When CoCo runs `dbt deps` or `dbt build`, you may be prompted to select an External Access Integration. Choose **`dbt_deps_eai`** (created by the setup script) and click **Confirm**.
 
 Click **Keep All** on the generated files once you've reviewed them.
 
 ### Step 4: Validate
 
 ```sql
-SELECT * FROM NZBANK_HOL.DEV.WEEKLY_TRUCK_PERFORMANCE
+SELECT * FROM tasty_bytes_dbt_db.DEV.WEEKLY_TRUCK_PERFORMANCE
 ORDER BY TOTAL_REVENUE DESC LIMIT 10;
 ```
 
@@ -304,8 +304,8 @@ A: Yes — Copilot autocompletes syntax without knowing your actual Snowflake sc
 
 In the Workspace toolbar, select **Connect > Deploy dbt project**:
 1. Role: `ACCOUNTADMIN`
-2. Database/schema: `NZBANK_HOL.PROD`
-3. Name: `NZBANK_DBT_PROJECT`
+2. Database/schema: `tasty_bytes_dbt_db.PROD`
+3. Name: `tasty_bytes_dbt_project`
 4. Click **Deploy**
 
 The Output tab shows the exact `CREATE DBT PROJECT` SQL it ran — this is what a CI/CD pipeline would call via `snow dbt deploy` instead. That reference SQL is also in [`assets/task_and_alert.sql`](assets/task_and_alert.sql) if you'd rather run it directly.
@@ -313,7 +313,7 @@ The Output tab shows the exact `CREATE DBT PROJECT` SQL it ran — this is what 
 Confirm it exists:
 
 ```sql
-SHOW DBT PROJECTS IN SCHEMA NZBANK_HOL.PROD;
+SHOW DBT PROJECTS IN SCHEMA tasty_bytes_dbt_db.PROD;
 ```
 
 **What to look for:** this created a **versioned Snowflake object**, not a one-off script execution. Future changes use **Deploy** again to add a new version, rather than overwriting — the same discipline as a proper release process, built in.
@@ -324,25 +324,24 @@ Open [`assets/task_and_alert.sql`](assets/task_and_alert.sql) in a SQL worksheet
 
 After updating your email in the SQL script, run all statements in [`assets/task_and_alert.sql`](assets/task_and_alert.sql). This creates:
 
-1. A **run** task (`NZBANK_RUN_DBT_TASK`) scheduled daily at 06:00 UTC
-2. A **test** task (`NZBANK_TEST_DBT_TASK`) chained to execute only after the run task succeeds
-3. A failure **alert** that emails you when either task fails
+1. A **build** task (`tb_dbt_build_task`) scheduled daily at 06:00 UTC — runs models and tests in DAG order, failing early if any test fails
+2. A failure **alert** that emails you when the task fails
 
-The two tasks use an `AFTER` dependency so that tests never run against stale models. `EXECUTE DBT PROJECT` does not support the `build` subcommand, which is why `run` and `test` are issued as separate chained tasks.
+`build` is the dbt equivalent of `run` + `test` in a single pass — it executes each model and its downstream tests together in topological order, so a failing test halts the pipeline before dependent models see bad data.
 
-> **Note:** The Snowsight UI (**Project Details > Create Schedule**) can create individual scheduled tasks, but does not support the `AFTER` chaining required here. Use SQL for this step.
+> **Note:** You can also create this schedule via the Snowsight UI (**Project Details > Create Schedule**). The SQL file is provided for reference and for the CI/CD mapping discussion.
 
 ### Step 3: Monitor — Snowsight Is the Operations Console
 
-- **Project status and DAG:** *Catalog → Database Explorer → NZBANK_HOL → PROD → dbt Projects → NZBANK_DBT_PROJECT*
+- **Project status and DAG:** *Catalog → Database Explorer → tasty_bytes_dbt_db → PROD → dbt Projects → tasty_bytes_dbt_project*
 - **Run history:** the same project page, Run History tab
 - **Tracing/logs:** *Monitoring → Traces & Logs* — useful if a scheduled run fails
-- **Cost:** *Admin → Cost Management → Consumption* — since this lab uses a dedicated `NZBANK_WH`, cost is isolated and attributable, the same pattern you'd use for a real production pipeline
+- **Cost:** *Admin → Cost Management → Consumption* — since this lab uses a dedicated `tasty_bytes_dbt_wh`, cost is isolated and attributable, the same pattern you'd use for a real production pipeline
 
 You can also ask CoCo directly instead of navigating:
 
 ```
-Show me the run history for NZBANK_DBT_PROJECT and flag any failed runs.
+Show me the run history for tasty_bytes_dbt_project and flag any failed runs.
 ```
 
 ### Validate
@@ -354,7 +353,7 @@ SELECT *
 FROM TABLE(INFORMATION_SCHEMA.TASK_HISTORY(
   SCHEDULED_TIME_RANGE_START => DATEADD('hour', -1, CURRENT_TIMESTAMP())
 ))
-WHERE NAME IN ('NZBANK_RUN_DBT_TASK', 'NZBANK_TEST_DBT_TASK');
+WHERE NAME = 'TB_DBT_BUILD_TASK';
 ```
 
 ### Best Practices
@@ -404,7 +403,7 @@ If you can answer all four, this lab has done its job.
 
 ## Module 04: Lab Cleanup
 
-**Business Context:** Every object this lab created is scoped under the `NZBANK_` prefix specifically so cleanup is a single, complete pass — no orphaned warehouses or tasks left running (and billing) after the session ends.
+**Business Context:** Every object this lab created is scoped under the `tasty_bytes_dbt_` prefix so cleanup is a single, complete pass — no orphaned warehouses or tasks left running (and billing) after the session ends.
 
 ### Step 1: Run Cleanup
 
@@ -412,20 +411,20 @@ If you can answer all four, this lab has done its job.
 2. Paste the contents of [`assets/cleanup.sql`](assets/cleanup.sql)
 3. Click **Run All**
 
-This suspends the Tasks, suspends the warehouse, and drops `NZBANK_HOL` (which removes the `DBT PROJECT` object, Tasks, and Alert along with it) and `NZBANK_WH`.
+This suspends the Tasks, suspends the warehouse, and drops `tasty_bytes_dbt_db` (which removes the `DBT PROJECT` object, Tasks, and Alert along with it) and `tasty_bytes_dbt_wh`.
 
 ### Validate
 
 ```sql
-SHOW DATABASES LIKE 'NZBANK%';
-SHOW WAREHOUSES LIKE 'NZBANK%';
+SHOW DATABASES LIKE 'tasty_bytes_dbt%';
+SHOW WAREHOUSES LIKE 'tasty_bytes_dbt%';
 ```
 
 Both should return zero rows.
 
 ### Notes for Instructors
 
-If running this lab for a group sharing an account, confirm each participant used a unique suffix (e.g. `NZBANK_<initials>_HOL`) before this module, or coordinate a single shared cleanup pass at the end rather than each participant dropping shared objects independently.
+If running this lab for a group sharing an account, coordinate a single shared cleanup pass at the end rather than each participant dropping shared objects independently.
 
 ---
 
@@ -443,7 +442,7 @@ CoCo has a bundled `semantic-view` skill. Use it straight against the mart table
 
 ```
 Using the semantic-view skill, create a semantic view called
-SV_TRUCK_PERFORMANCE over NZBANK_HOL.DEV.WEEKLY_TRUCK_PERFORMANCE.
+SV_TRUCK_PERFORMANCE over tasty_bytes_dbt_db.DEV.WEEKLY_TRUCK_PERFORMANCE.
 Dimensions: truck_id, truck_brand_name, sales_month.
 Metrics: total revenue, total orders, average order value, profit margin.
 ```
@@ -550,10 +549,10 @@ A short, read-only round-up — not a hands-on exercise — for engineers who wa
 
 | Object | Name |
 |--------|------|
-| Warehouse | `NZBANK_WH` |
-| Database | `NZBANK_HOL` |
-| dbt project object | `NZBANK_HOL.PROD.NZBANK_DBT_PROJECT` |
-| Task | `NZBANK_HOL.PROD.NZBANK_RUN_DBT_TASK` |
+| Warehouse | `tasty_bytes_dbt_wh` |
+| Database | `tasty_bytes_dbt_db` |
+| dbt project object | `tasty_bytes_dbt_db.PROD.tasty_bytes_dbt_project` |
+| Task | `tasty_bytes_dbt_db.prod.tb_dbt_build_task` |
 
 ## File Structure
 
