@@ -238,7 +238,56 @@ description and a range test for the new column.
 
 **What to look for:** CoCo updates the **model SQL and the YAML docs/tests in the same response** — this is the "rapid editing and optimization" pattern from Snowflake's [CoCo + dbt Projects video](https://www.youtube.com/watch?v=2g2RZZNm32k). Click **Keep All** once reviewed.
 
-### Step 6: Detect an Anomaly in Source Data with CoCo
+---
+
+### Step 6: Encode Team Standards with AGENTS.md
+
+CoCo in Snowsight automatically reads an `AGENTS.md` file from the root of your Workspace and applies its instructions to every conversation. This means you can encode your team's dbt modelling standards once, and CoCo will follow them by default — no need to repeat instructions in every prompt.
+
+**Create the file:**
+
+In your Workspace, create a new file called `AGENTS.md` at the root level (same directory as `dbt_project.yml`). Paste the following content:
+
+```markdown
+# dbt Modelling Standards
+
+## Required for all models
+- Always set materialization explicitly in the model config block
+- Add `_loaded_at` timestamp column using `{{ dbt.current_timestamp() }}` to every staging model
+- Every primary key must have `not_null` + `unique` tests in schema.yml
+- Use `{{ ref() }}` for all model references — never hardcode table names
+- Use `{{ source() }}` for raw tables
+
+## Naming Conventions
+- Staging models: `stg_<source>__<entity>`
+- Marts: `fct_` (facts) or `dim_` (dimensions)
+- Surrogate keys: `<model_name>_key` using `{{ dbt_utils.generate_surrogate_key() }}`
+
+## Incremental Models
+- Must include `unique_key`, `on_schema_change='append_new_columns'`, and `merge_exclude_columns=['_loaded_at']`
+- Use `{% if is_incremental() %}` with an ingestion-timestamp filter where available
+```
+
+> **Note:** A more comprehensive version of this file is available in the lab GitHub repo under `assets/AGENTS.md`. For this lab, the shorter version above is enough to demonstrate the feature.
+
+**Ask CoCo to improve your existing model:**
+
+```
+Review my staging model against the standards in AGENTS.md. Apply any
+changes needed to bring it into compliance.
+```
+
+**What to look for:** CoCo should read the `AGENTS.md` file automatically and apply changes such as:
+- Adding a `_loaded_at` column if missing
+- Adding explicit materialization config
+- Adding `not_null` / `unique` tests to the schema.yml for the primary key
+- Renaming any columns that don't follow snake_case
+
+Click **Keep All** once you've reviewed the diff.
+
+**Why this matters:** In production, you'd commit `AGENTS.md` to your Git repo alongside your dbt project. Every engineer on the team gets the same standards enforced by CoCo — no manual code review needed for convention compliance. This is the equivalent of a team-wide linter, but for dbt architectural patterns, not just syntax.
+
+### Step 7: Detect an Anomaly in Source Data with CoCo
 
 Your model is working and tests pass. Now simulate a real production scenario: **a source system bug causes sales to spike 4x overnight**, and nobody notices until a dashboard looks wrong. You'll use CoCo to investigate the anomaly and add a test that catches it automatically next time.
 
