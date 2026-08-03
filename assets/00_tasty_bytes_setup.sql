@@ -31,6 +31,9 @@ CREATE WAREHOUSE IF NOT EXISTS NZBANK_WH
 
 USE WAREHOUSE NZBANK_WH;
 
+-- Temporarily scale up for faster bulk load (resized back to XS at the end)
+ALTER WAREHOUSE NZBANK_WH SET WAREHOUSE_SIZE = 'XLARGE';
+
 -- ----------------------------------------------------------------------
 -- STEP 2: Database and schemas
 -- RAW holds the Tasty Bytes source data. DEV/PROD are where your dbt
@@ -56,16 +59,22 @@ ALTER SCHEMA NZBANK_HOL.PROD SET TRACE_LEVEL = 'ALWAYS';
 ALTER SCHEMA NZBANK_HOL.PROD SET METRIC_LEVEL = 'ALL';
 
 -- ----------------------------------------------------------------------
--- NOT NEEDED FOR THIS LAB: GitHub secret + API integration (tutorial Step 4)
--- and the network rule / external access integration for `dbt deps`
--- (tutorial Step 5). Those are only required if you fork the dbt repo
--- yourself and want to push changes back, or your project pulls external
--- dbt packages. This lab uses the public Snowflake-Labs repo read-only
--- (Module 01), so neither is required.
+-- STEP 5: External Access Integration for dbt deps
+-- dbt deps needs to reach hub.getdbt.com and codeload.github.com to
+-- download packages (e.g. dbt_utils). This creates the network rule
+-- and EAI so participants don't have to do it manually in the lab.
 -- ----------------------------------------------------------------------
+CREATE OR REPLACE NETWORK RULE NZBANK_HOL.PUBLIC.DBT_DEPS_NETWORK_RULE
+    MODE = EGRESS
+    TYPE = HOST_PORT
+    VALUE_LIST = ('hub.getdbt.com', 'codeload.github.com', 'github.com', 'raw.githubusercontent.com');
+
+CREATE OR REPLACE EXTERNAL ACCESS INTEGRATION DBT_DEPS_EAI
+    ALLOWED_NETWORK_RULES = (NZBANK_HOL.PUBLIC.DBT_DEPS_NETWORK_RULE)
+    ENABLED = TRUE;
 
 -- ----------------------------------------------------------------------
--- STEP 4: Source data -- Tasty Bytes foundational data model
+-- STEP 6: Source data -- Tasty Bytes foundational data model
 -- Creates the raw zone tables and loads them from Snowflake's public
 -- quickstarts S3 bucket. No credentials needed -- this bucket is public.
 -- ----------------------------------------------------------------------
@@ -137,5 +146,8 @@ COPY INTO NZBANK_HOL.RAW.truck        FROM @NZBANK_HOL.RAW.s3load/raw_pos/truck/
 COPY INTO NZBANK_HOL.RAW.customer_loyalty FROM @NZBANK_HOL.RAW.s3load/raw_customer/customer_loyalty/;
 COPY INTO NZBANK_HOL.RAW.order_header FROM @NZBANK_HOL.RAW.s3load/raw_pos/order_header/;
 COPY INTO NZBANK_HOL.RAW.order_detail FROM @NZBANK_HOL.RAW.s3load/raw_pos/order_detail/;
+
+-- Scale warehouse back down for the rest of the lab
+ALTER WAREHOUSE NZBANK_WH SET WAREHOUSE_SIZE = 'XSMALL';
 
 SELECT 'NZBANK_HOL setup is complete' AS note;

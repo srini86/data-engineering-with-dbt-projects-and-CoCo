@@ -134,22 +134,6 @@ The dbt project from the Snowflake-Labs repo ships with default database/warehou
 
 Save the file. This ensures all dbt commands run against the objects you created in Step 2.
 
-### Step 5: Create an External Access Integration for dbt Packages
-
-Later in the lab, CoCo will run `dbt deps` to install packages from `hub.getdbt.com` and `codeload.github.com`. This requires an External Access Integration. Create one now so it's ready when needed.
-
-In the CoCo panel, enter:
-
-```
-Create an External Access Integration inside the NZBANK_HOL database called DBT_DEPS_EAI so I can run dbt deps, read the documentation
-```
-
-CoCo will create:
-1. **Network Rule:** `NZBANK_HOL.PUBLIC.DBT_DEPS_NETWORK_RULE` — allows egress to `hub.getdbt.com` and `codeload.github.com`
-2. **External Access Integration:** `DBT_DEPS_EAI` — enables the network rule
-
-> **Note:** If you receive an error stating that External Access Integrations are not enabled for trial accounts, ask an instructor for help — they may need to manually enable this feature for your account.
-
 ### Customer Q&A
 
 **Q: Why Tasty Bytes and not our own banking data?**
@@ -211,7 +195,7 @@ Proceed with the plan. Create the model and schema.yml files, then run dbt
 build and validate the output row count.
 ```
 
-> **Tip:** When CoCo runs `dbt deps` or `dbt build`, you may be prompted to select an External Access Integration. Choose **`DBT_DEPS_EAI`** (created in Module 01, Step 5) and click **Confirm**.
+> **Tip:** When CoCo runs `dbt deps` or `dbt build`, you may be prompted to select an External Access Integration. Choose **`DBT_DEPS_EAI`** (created by the setup script) and click **Confirm**.
 
 Click **Keep All** on the generated files once you've reviewed them.
 
