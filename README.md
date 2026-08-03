@@ -245,7 +245,7 @@ In your Workspace, create a new file called `AGENTS.md` at the root level (same 
 **Ask CoCo to improve your existing model:**
 
 ```
-Review my staging model against the standards in AGENTS.md. Apply any
+Review weekly_truck_performance against the standards in AGENTS.md. Apply any
 changes needed to bring it into compliance.
 ```
 
@@ -293,10 +293,11 @@ A: Yes — Copilot autocompletes syntax without knowing your actual Snowflake sc
 ### Step 1: Deploy
 
 In the Workspace toolbar, select **Connect > Deploy dbt project**:
-1. Role: `ACCOUNTADMIN`
-2. Database/schema: `tasty_bytes_dbt_db.PROD`
+1. Location: `tasty_bytes_dbt_db` → `PROD`
+2. Select **Create dbt project**
 3. Name: `tasty_bytes_dbt_project`
-4. Click **Deploy**
+4. External Access Integration: select **`DBT_DEPS_EAI`** (required so the deployed project can run `dbt deps` to fetch packages)
+5. Click **Deploy**
 
 The Output tab shows the exact `CREATE DBT PROJECT` SQL it ran — this is what a CI/CD pipeline would call via `snow dbt deploy` instead. That reference SQL is also in [`assets/task_and_alert.sql`](assets/task_and_alert.sql) if you'd rather run it directly.
 
@@ -310,9 +311,12 @@ SHOW DBT PROJECTS IN SCHEMA tasty_bytes_dbt_db.PROD;
 
 ### Step 2: Schedule with a Task and Alert
 
-Open [`assets/task_and_alert.sql`](assets/task_and_alert.sql) in a SQL worksheet. Before running, replace `<YOUR EMAIL HERE>` in both the notification integration and the alert section with your verified Snowsight email address (verify under user icon > Profile if you haven't already).
+1. In the Workspaces dropdown, switch to the **github-instructions** workspace
+2. Open `assets/task_and_alert.sql`
+3. Replace `<YOUR EMAIL HERE>` (appears twice) with your verified Snowsight email address (verify under user icon > Profile if you haven't already)
+4. Click **Run All**
 
-After updating your email in the SQL script, run all statements in [`assets/task_and_alert.sql`](assets/task_and_alert.sql). This creates:
+This creates:
 
 1. A **build** task (`tb_dbt_build_task`) scheduled daily at 06:00 UTC — runs models and tests in DAG order, failing early if any test fails
 2. A failure **alert** that emails you when the task fails
