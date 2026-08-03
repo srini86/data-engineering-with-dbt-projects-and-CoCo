@@ -238,8 +238,6 @@ description and a range test for the new column.
 
 **What to look for:** CoCo updates the **model SQL and the YAML docs/tests in the same response** — this is the "rapid editing and optimization" pattern from Snowflake's [CoCo + dbt Projects video](https://www.youtube.com/watch?v=2g2RZZNm32k). Click **Keep All** once reviewed.
 
----
-
 ### Step 6: Encode Team Standards with AGENTS.md
 
 CoCo in Snowsight automatically reads an `AGENTS.md` file from the root of your Workspace and applies its instructions to every conversation. This means you can encode your team's dbt modelling standards once, and CoCo will follow them by default — no need to repeat instructions in every prompt.
@@ -286,82 +284,6 @@ changes needed to bring it into compliance.
 Click **Keep All** once you've reviewed the diff.
 
 **Why this matters:** In production, you'd commit `AGENTS.md` to your Git repo alongside your dbt project. Every engineer on the team gets the same standards enforced by CoCo — no manual code review needed for convention compliance. This is the equivalent of a team-wide linter, but for dbt architectural patterns, not just syntax.
-
-### Step 7: Detect an Anomaly in Source Data with CoCo
-
-Your model is working and tests pass. Now simulate a real production scenario: **a source system bug causes sales to spike 4x overnight**, and nobody notices until a dashboard looks wrong. You'll use CoCo to investigate the anomaly and add a test that catches it automatically next time.
-
-**Introduce the anomaly:** Run this SQL in a worksheet to insert duplicate orders that inflate revenue for one truck:
-
-```sql
--- Simulate a source system bug: order_header rows duplicated 3x for truck 1
--- (mimics a payment retry bug that re-inserts completed orders)
-INSERT INTO NZBANK_HOL.RAW.ORDER_HEADER
-SELECT
-    ORDER_ID + 900000,
-    TRUCK_ID,
-    ORDER_TS,
-    ORDER_AMOUNT,
-    ORDER_TAX_AMOUNT,
-    ORDER_DISCOUNT_AMOUNT,
-    ORDER_TOTAL
-FROM NZBANK_HOL.RAW.ORDER_HEADER
-WHERE TRUCK_ID = 1
-LIMIT 500;
-```
-
-This simulates a common banking scenario — a payment retry or ETL re-run that accidentally duplicates transactions.
-
-**Re-run the model:**
-
-```
-Run dbt build on weekly_truck_performance and show me the results.
-```
-
-Tests pass — nothing currently checks for volume anomalies. But the data is wrong. Ask CoCo to investigate:
-
-```
-Compare this week's total_revenue for truck_id = 1 against its historical
-weekly average in weekly_truck_performance. Does anything look unusual?
-```
-
-**What to look for:** CoCo should query the model, identify that truck 1's revenue is ~4x its normal weekly average, and flag it as anomalous.
-
-**Ask CoCo to add a guard rail:**
-
-```
-That spike is caused by duplicate source records. Add a dbt test to
-weekly_truck_performance that flags any truck whose weekly revenue exceeds
-3x its rolling 8-week average. Use a custom generic test or a
-dbt_utils/singular test — whichever is simpler.
-```
-
-**What to look for:** CoCo should create a singular test (a `.sql` file in `tests/`) or a custom schema test that:
-- Calculates each truck's rolling 8-week average revenue
-- Compares the current week against that baseline
-- Fails if any truck exceeds 3x the average
-
-Click **Keep All** once reviewed, then run:
-
-```
-Run dbt test on weekly_truck_performance and show me which tests failed.
-```
-
-The new anomaly test should fail for truck 1 — exactly as intended. This proves the guard rail works.
-
-**Clean up the bad data:**
-
-```sql
-DELETE FROM NZBANK_HOL.RAW.ORDER_HEADER WHERE ORDER_ID > 900000;
-```
-
-Then re-run to confirm the anomaly test passes on clean data:
-
-```
-Run dbt build on weekly_truck_performance and confirm all tests pass.
-```
-
-**Discussion point:** Standard dbt tests (`not_null`, `unique`, `accepted_values`) catch structural data issues. But **volume anomalies** — duplicates, missing batches, unexpected spikes — slip through because each individual row looks valid. An anomaly detection test like this catches problems that row-level tests miss. In production, you'd combine this with the Task alert from Module 03 so the team gets notified the moment revenue looks abnormal.
 
 ---
 
