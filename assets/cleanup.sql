@@ -7,29 +7,29 @@
 USE ROLE ACCOUNTADMIN;
 
 -- Suspend Task first, so scheduled runs stop cleanly
-ALTER TASK IF EXISTS tasty_bytes_dbt_db.prod.tb_dbt_build_task SUSPEND;
+ALTER TASK IF EXISTS NZBANK_HOL.prod.NZBANK_DBT_BUILD_TASK SUSPEND;
 
 -- Suspend the alert
-ALTER ALERT IF EXISTS tasty_bytes_dbt_db.prod.tb_dbt_alert SUSPEND;
+ALTER ALERT IF EXISTS NZBANK_HOL.prod.NZBANK_DBT_ALERT SUSPEND;
 
 -- Suspend the warehouse before dropping it
-ALTER WAREHOUSE IF EXISTS tasty_bytes_dbt_wh SUSPEND;
+ALTER WAREHOUSE IF EXISTS NZBANK_WH SUSPEND;
 
 -- The dbt project object must be dropped explicitly
-DROP DBT PROJECT IF EXISTS tasty_bytes_dbt_db.prod.tasty_bytes_dbt_project;
+DROP DBT PROJECT IF EXISTS NZBANK_HOL.prod.NZBANK_DBT_PROJECT;
 
 -- Dropping the database removes Tasks, Alert, tables/schemas in one step
-DROP DATABASE IF EXISTS tasty_bytes_dbt_db;
-DROP WAREHOUSE IF EXISTS tasty_bytes_dbt_wh;
+DROP DATABASE IF EXISTS NZBANK_HOL;
+DROP WAREHOUSE IF EXISTS NZBANK_WH;
 
 -- Integrations live at the account level (not inside the DB)
-DROP NOTIFICATION INTEGRATION IF EXISTS tb_dbt_email_notifications;
-DROP EXTERNAL ACCESS INTEGRATION IF EXISTS dbt_deps_eai;
+DROP NOTIFICATION INTEGRATION IF EXISTS NZBANK_EMAIL_NOTIFICATIONS;
+DROP EXTERNAL ACCESS INTEGRATION IF EXISTS DBT_DEPS_EAI;
 
 -- ----------------------------------------------------------------------
 -- Validate: all should return zero rows
 -- ----------------------------------------------------------------------
-SHOW DATABASES LIKE 'tasty_bytes_dbt%';
-SHOW WAREHOUSES LIKE 'tasty_bytes_dbt%';
+SHOW DATABASES LIKE 'NZBANK%';
+SHOW WAREHOUSES LIKE 'NZBANK%';
 SHOW NOTIFICATION INTEGRATIONS LIKE 'tb_dbt%';
-SHOW EXTERNAL ACCESS INTEGRATIONS LIKE 'dbt_deps%';
+SHOW EXTERNAL ACCESS INTEGRATIONS LIKE 'DBT_DEPS%';

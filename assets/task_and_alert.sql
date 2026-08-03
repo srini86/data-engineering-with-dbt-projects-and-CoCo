@@ -10,31 +10,31 @@
 -- ============================================================================
 
 USE ROLE ACCOUNTADMIN;
-USE WAREHOUSE tasty_bytes_dbt_wh;
+USE WAREHOUSE NZBANK_WH;
 
 -- ----------------------------------------------------------------------
 -- Task: Build (run + test) the dbt project daily at 06:00 UTC
 -- `build` runs models and tests in DAG order, failing early if any test fails.
 -- ----------------------------------------------------------------------
-ALTER TASK IF EXISTS tasty_bytes_dbt_db.prod.tb_dbt_build_task SUSPEND;
+ALTER TASK IF EXISTS NZBANK_HOL.prod.NZBANK_DBT_BUILD_TASK SUSPEND;
 
-CREATE OR ALTER TASK tasty_bytes_dbt_db.prod.tb_dbt_build_task
-    WAREHOUSE = tasty_bytes_dbt_wh
+CREATE OR ALTER TASK NZBANK_HOL.prod.NZBANK_DBT_BUILD_TASK
+    WAREHOUSE = NZBANK_WH
     SCHEDULE = 'USING CRON 0 6 * * * UTC'
 AS
-    EXECUTE DBT PROJECT tasty_bytes_dbt_db.prod.tasty_bytes_dbt_project
+    EXECUTE DBT PROJECT NZBANK_HOL.prod.NZBANK_DBT_PROJECT
         ARGS = 'build --target prod';
 
-ALTER TASK tasty_bytes_dbt_db.prod.tb_dbt_build_task RESUME;
+ALTER TASK NZBANK_HOL.prod.NZBANK_DBT_BUILD_TASK RESUME;
 
 -- Run once immediately to confirm the task works
-EXECUTE TASK tasty_bytes_dbt_db.prod.tb_dbt_build_task;
+EXECUTE TASK NZBANK_HOL.prod.NZBANK_DBT_BUILD_TASK;
 
 -- ----------------------------------------------------------------------
 -- Notification Integration: required for the alert to send emails.
 -- Replace <YOUR EMAIL HERE> with your verified Snowsight email address.
 -- ----------------------------------------------------------------------
-CREATE NOTIFICATION INTEGRATION IF NOT EXISTS tb_dbt_email_notifications
+CREATE NOTIFICATION INTEGRATION IF NOT EXISTS NZBANK_EMAIL_NOTIFICATIONS
     TYPE = EMAIL
     ENABLED = TRUE
     ALLOWED_RECIPIENTS = ('<YOUR EMAIL HERE>');
@@ -44,7 +44,7 @@ CREATE NOTIFICATION INTEGRATION IF NOT EXISTS tb_dbt_email_notifications
 -- NOTE: verify your email in Snowsight first (user icon > Profile > email),
 -- and replace <YOUR EMAIL HERE> below before running.
 -- ----------------------------------------------------------------------
-CREATE OR REPLACE ALERT tasty_bytes_dbt_db.prod.tb_dbt_alert
+CREATE OR REPLACE ALERT NZBANK_HOL.prod.NZBANK_DBT_ALERT
     SCHEDULE = '60 MINUTE'
     IF (EXISTS (
         SELECT NAME, SCHEMA_NAME
@@ -77,14 +77,14 @@ CREATE OR REPLACE ALERT tasty_bytes_dbt_db.prod.tb_dbt_alert
             );
         END;
 
-ALTER ALERT tasty_bytes_dbt_db.prod.tb_dbt_alert RESUME;
+ALTER ALERT NZBANK_HOL.prod.NZBANK_DBT_ALERT RESUME;
 
 -- Run once to confirm the alert fires correctly against current history
-EXECUTE ALERT tasty_bytes_dbt_db.prod.tb_dbt_alert;
+EXECUTE ALERT NZBANK_HOL.prod.NZBANK_DBT_ALERT;
 
 -- Optional check for alert task history
 SELECT *
-FROM TABLE(tasty_bytes_dbt_db.INFORMATION_SCHEMA.ALERT_HISTORY(
+FROM TABLE(NZBANK_HOL.INFORMATION_SCHEMA.ALERT_HISTORY(
     ALERT_NAME => 'TB_DBT_ALERT',
     SCHEDULED_TIME_RANGE_START => DATEADD('hour', -1, CURRENT_TIMESTAMP())
 ))

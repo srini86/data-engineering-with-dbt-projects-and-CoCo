@@ -118,17 +118,17 @@ Now, let's set up our database/schema.
 4. Click **Run All**
 
 This creates:
-- Database `tasty_bytes_dbt_db` with schemas `RAW`, `DEV`, `PROD`
-- Warehouse `tasty_bytes_dbt_wh` (XSmall, auto-suspend)
+- Database `NZBANK_HOL` with schemas `RAW`, `DEV`, `PROD`
+- Warehouse `NZBANK_WH` (XSmall, auto-suspend)
 - Eight source tables in `RAW` loaded from Snowflake's public Tasty Bytes dataset (`country`, `franchise`, `location`, `menu`, `truck`, `order_header`, `order_detail`, `customer_loyalty`)
 
 ### Validate
 
 ```sql
 USE ROLE ACCOUNTADMIN;
-USE WAREHOUSE tasty_bytes_dbt_wh;
-SHOW TABLES IN SCHEMA tasty_bytes_dbt_db.RAW;
-SELECT COUNT(*) FROM tasty_bytes_dbt_db.RAW.ORDER_HEADER;
+USE WAREHOUSE NZBANK_WH;
+SHOW TABLES IN SCHEMA NZBANK_HOL.RAW;
+SELECT COUNT(*) FROM NZBANK_HOL.RAW.ORDER_HEADER;
 ```
 
 You should see all 8 source tables with data loaded.
@@ -138,6 +138,16 @@ You should see all 8 source tables with data loaded.
 ## Module 02: Build with CoCo
 
 **Switch workspace:** In the Workspaces dropdown, switch to the **dbt-project** workspace. This is where your dbt project lives and where CoCo will generate models.
+
+### Step 0: Update profiles.yml
+
+The dbt project's `profiles.yml` needs to point at the database and warehouse you just created. Open `tasty_bytes_dbt_demo/profiles.yml` in the **dbt-project** workspace and update both the `dev` and `prod` targets:
+
+- `database:` → `NZBANK_HOL`
+- `schema:` → `DEV` (for the dev target) / `PROD` (for the prod target)
+- `warehouse:` → `NZBANK_WH`
+
+Save the file. (The `account` and `user` fields can stay as `'not needed'` — when dbt runs inside a Workspace, it inherits your active Snowflake session.)
 
 **Business Context:** This replaces days 1-3 of the old workflow — Bootstrap scripts, manual SQL on a VM, Copilot-assisted `schema.yml` authoring. CoCo does context-aware building: it scans your actual source tables, writes dbt-native SQL, adds tests, and validates output — all from the CoCo panel inside your Workspace.
 
@@ -156,7 +166,7 @@ What does the dbt-projects-on-snowflake skill do?
 ### Step 2: Discover the Source Data
 
 ```
-Find all tables in tasty_bytes_dbt_db.RAW and give me a one-line description of each.
+Find all tables in NZBANK_HOL.RAW and give me a one-line description of each.
 ```
 
 ```
@@ -185,14 +195,14 @@ Proceed with the plan. Create the model and schema.yml files, then run dbt
 build and validate the output row count.
 ```
 
-> **Tip:** When CoCo runs `dbt deps` or `dbt build`, you may be prompted to select an External Access Integration. Choose **`dbt_deps_eai`** (created by the setup script) and click **Confirm**.
+> **Tip:** When CoCo runs `dbt deps` or `dbt build`, you may be prompted to select an External Access Integration. Choose **`DBT_DEPS_EAI`** (created by the setup script) and click **Confirm**.
 
 Click **Keep All** on the generated files once you've reviewed them.
 
 ### Step 4: Validate
 
 ```sql
-SELECT * FROM tasty_bytes_dbt_db.DEV.WEEKLY_TRUCK_PERFORMANCE
+SELECT * FROM NZBANK_HOL.DEV.WEEKLY_TRUCK_PERFORMANCE
 ORDER BY TOTAL_REVENUE DESC LIMIT 10;
 ```
 
@@ -293,9 +303,9 @@ A: Yes — Copilot autocompletes syntax without knowing your actual Snowflake sc
 ### Step 1: Deploy
 
 In the Workspace toolbar, select **Connect > Deploy dbt project**:
-1. Location: `tasty_bytes_dbt_db` → `PROD`
+1. Location: `NZBANK_HOL` → `PROD`
 2. Select **Create dbt project**
-3. Name: `tasty_bytes_dbt_project`
+3. Name: `NZBANK_DBT_PROJECT`
 4. External Access Integration: select **`DBT_DEPS_EAI`** (required so the deployed project can run `dbt deps` to fetch packages)
 5. Click **Deploy**
 
@@ -304,7 +314,7 @@ The Output tab shows the exact `CREATE DBT PROJECT` SQL it ran — this is what 
 Confirm it exists:
 
 ```sql
-SHOW DBT PROJECTS IN SCHEMA tasty_bytes_dbt_db.PROD;
+SHOW DBT PROJECTS IN SCHEMA NZBANK_HOL.PROD;
 ```
 
 **What to look for:** this created a **versioned Snowflake object**, not a one-off script execution. Future changes use **Deploy** again to add a new version, rather than overwriting — the same discipline as a proper release process, built in.
@@ -318,7 +328,7 @@ SHOW DBT PROJECTS IN SCHEMA tasty_bytes_dbt_db.PROD;
 
 This creates:
 
-1. A **build** task (`tb_dbt_build_task`) scheduled daily at 06:00 UTC — runs models and tests in DAG order, failing early if any test fails
+1. A **build** task (`NZBANK_DBT_BUILD_TASK`) scheduled daily at 06:00 UTC — runs models and tests in DAG order, failing early if any test fails
 2. A failure **alert** that emails you when the task fails
 
 `build` is the dbt equivalent of `run` + `test` in a single pass — it executes each model and its downstream tests together in topological order, so a failing test halts the pipeline before dependent models see bad data.
@@ -327,15 +337,15 @@ This creates:
 
 ### Step 3: Monitor — Snowsight Is the Operations Console
 
-- **Project status and DAG:** *Catalog → Database Explorer → tasty_bytes_dbt_db → PROD → dbt Projects → tasty_bytes_dbt_project*
+- **Project status and DAG:** *Catalog → Database Explorer → NZBANK_HOL → PROD → dbt Projects → NZBANK_DBT_PROJECT*
 - **Run history:** the same project page, Run History tab
 - **Tracing/logs:** *Monitoring → Traces & Logs* — useful if a scheduled run fails
-- **Cost:** *Admin → Cost Management → Consumption* — since this lab uses a dedicated `tasty_bytes_dbt_wh`, cost is isolated and attributable, the same pattern you'd use for a real production pipeline
+- **Cost:** *Admin → Cost Management → Consumption* — since this lab uses a dedicated `NZBANK_WH`, cost is isolated and attributable, the same pattern you'd use for a real production pipeline
 
 You can also ask CoCo directly instead of navigating:
 
 ```
-Show me the run history for tasty_bytes_dbt_project and flag any failed runs.
+Show me the run history for NZBANK_DBT_PROJECT and flag any failed runs.
 ```
 
 ### Validate
@@ -397,7 +407,7 @@ If you can answer all four, this lab has done its job.
 
 ## Module 04: Lab Cleanup
 
-**Business Context:** Every object this lab created is scoped under the `tasty_bytes_dbt_` prefix so cleanup is a single, complete pass — no orphaned warehouses or tasks left running (and billing) after the session ends.
+**Business Context:** Every object this lab created is scoped under the `NZBANK_` prefix so cleanup is a single, complete pass — no orphaned warehouses or tasks left running (and billing) after the session ends.
 
 ### Step 1: Run Cleanup
 
@@ -405,13 +415,13 @@ If you can answer all four, this lab has done its job.
 2. Paste the contents of [`assets/cleanup.sql`](assets/cleanup.sql)
 3. Click **Run All**
 
-This suspends the Tasks, suspends the warehouse, and drops `tasty_bytes_dbt_db` (which removes the `DBT PROJECT` object, Tasks, and Alert along with it) and `tasty_bytes_dbt_wh`.
+This suspends the Tasks, suspends the warehouse, and drops `NZBANK_HOL` (which removes the `DBT PROJECT` object, Tasks, and Alert along with it) and `NZBANK_WH`.
 
 ### Validate
 
 ```sql
-SHOW DATABASES LIKE 'tasty_bytes_dbt%';
-SHOW WAREHOUSES LIKE 'tasty_bytes_dbt%';
+SHOW DATABASES LIKE 'NZBANK%';
+SHOW WAREHOUSES LIKE 'NZBANK%';
 ```
 
 Both should return zero rows.
@@ -436,7 +446,7 @@ CoCo has a bundled `semantic-view` skill. Use it straight against the mart table
 
 ```
 Using the semantic-view skill, create a semantic view called
-SV_TRUCK_PERFORMANCE over tasty_bytes_dbt_db.DEV.WEEKLY_TRUCK_PERFORMANCE.
+SV_TRUCK_PERFORMANCE over NZBANK_HOL.DEV.WEEKLY_TRUCK_PERFORMANCE.
 Dimensions: truck_id, truck_brand_name, sales_month.
 Metrics: total revenue, total orders, average order value, profit margin.
 ```
@@ -543,10 +553,10 @@ A short, read-only round-up — not a hands-on exercise — for engineers who wa
 
 | Object | Name |
 |--------|------|
-| Warehouse | `tasty_bytes_dbt_wh` |
-| Database | `tasty_bytes_dbt_db` |
-| dbt project object | `tasty_bytes_dbt_db.PROD.tasty_bytes_dbt_project` |
-| Task | `tasty_bytes_dbt_db.prod.tb_dbt_build_task` |
+| Warehouse | `NZBANK_WH` |
+| Database | `NZBANK_HOL` |
+| dbt project object | `NZBANK_HOL.PROD.NZBANK_DBT_PROJECT` |
+| Task | `NZBANK_HOL.prod.NZBANK_DBT_BUILD_TASK` |
 
 ## File Structure
 
