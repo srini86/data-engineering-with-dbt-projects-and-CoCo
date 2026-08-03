@@ -56,7 +56,7 @@ Using Snowflake's public Tasty Bytes dataset, entirely through Snowsight and the
 | # | Module | What You'll Do | Timing |
 |---|--------|-----------------|--------|
 | 01 | [Setup](#module-01-setup) | Load Tasty Bytes data, pull the dbt project into a Workspace | 10 min |
-| 02 | [Build with CoCo](#module-02-build-with-coco) | Discover source tables, generate a model + tests, extend it | 25 min |
+| 02 | [Build with CoCo](#module-02-build-with-coco) | Discover source tables, generate a model + tests, extend it, debug a data quality failure | 30 min |
 | 03 | [Deploy and Operate](#module-03-deploy-and-operate) | Deploy, schedule with a Task, monitor | 20 min |
 | 04 | [Lab Cleanup](#module-04-lab-cleanup) | Tear down every object this lab created | 5 min |
 
@@ -84,16 +84,42 @@ Confirm it's connected:
 What databases do I have access to?
 ```
 
-### Step 2: Load the Tasty Bytes Source Data
+### Step 2: Set up your Git Workspaces
 
-1. In Snowsight, go to **Projects > Workspaces**
-2. Create a new **SQL File**
-3. Open [`assets/00_tasty_bytes_setup.sql`](assets/00_tasty_bytes_setup.sql) from this repo, copy its contents, and paste into the new SQL file
+We will need to connect to **two** GitHub repositories for this lab:
+
+| Workspace Name | Repository URL | Purpose |
+|----------------|---------------|----------|
+| `github-instructions` | `https://github.com/srini86/data-engineering-with-dbt-projects-and-CoCo.git` | Lab instructions and setup scripts |
+| `dbt-project` | `https://github.com/Snowflake-Labs/getting-started-with-dbt-on-snowflake.git` | The dbt project |
+
+For each repository, follow these steps to connect:
+1. In **Projects > Workspaces**, click the 'Create Workspace' (+) button → Create new **Git Workspace**
+2. Repository URL: paste the URL from the table above
+3. Workspace Name: use the name from the table above
+4. If you see "No API integration available", click **+ API Integration** and fill in:
+   - **Name:** `github`
+   - **Allowed prefixes:** `https://github.com`
+   - **Allowed authentication secrets:** All
+   - **OAuth authentication:** leave unchecked
+   - Click **Create**
+5. Select the `github` API integration
+6. Select **Public Repository**
+7. Click **Create**
+
+Snowsight pulls the repo directly into a browser-based Workspace. (Public repos are pull-only in a Workspace; that's fine for this lab since you're not pushing changes back.)
+
+### Step 3: Load the Tasty Bytes Source Data
+
+Now, let's set up our database/schema.
+
+1. In the Workspaces dropdown (top left of the editor), switch to the **github-instructions** workspace
+2. Open `assets/00_tasty_bytes_setup.sql`
 4. Click **Run All**
 
 This creates:
 - Database `NZBANK_HOL` with schemas `RAW`, `DEV`, `PROD`
-- Warehouse `NZBANK_WH` (XSmall, auto-suspend)
+- Warehouse `NZBANK_WH` (XLarge, auto-suspend)
 - Eight source tables in `RAW` loaded from Snowflake's public Tasty Bytes dataset (`country`, `franchise`, `location`, `menu`, `truck`, `order_header`, `order_detail`, `customer_loyalty`)
 
 ### Validate
@@ -107,63 +133,21 @@ SELECT COUNT(*) FROM NZBANK_HOL.RAW.ORDER_HEADER;
 
 You should see all 8 source tables with data loaded.
 
-### Step 3: Pull the dbt Project into a Workspace
-
-1. In **Projects > Workspaces**, click the 'Create Workspace' (+) button → Create new **Git Workspace**
-2. Repository URL: `https://github.com/Snowflake-Labs/getting-started-with-dbt-on-snowflake.git`
-3. Workspace Name: `NZBANK_dbt_Workspace`
-4. If you see "No API integration available", click **+ API Integration** and fill in:
-   - **Name:** `github`
-   - **Allowed prefixes:** `https://github.com`
-   - **Allowed authentication secrets:** All
-   - **OAuth authentication:** leave unchecked
-   - Click **Create**
-5. Select the `github` API integration
-6. Select **Public Repository**
-7. Click **Create**
-
-No `git clone`, no terminal — Snowsight pulls the repo directly into a browser-based Workspace. (Public repos are pull-only in a Workspace; that's fine for this lab since you're not pushing changes back.)
-
-### Step 4: Update `profiles.yml`
-
-The dbt project from the Snowflake-Labs repo ships with default database/warehouse names that don't match this lab. Open `profiles.yml` in the Workspace and update:
-
-- `database:` → `NZBANK_HOL`
-- `warehouse:` → `NZBANK_WH`
-- `schema:` → `DEV` (for the dev target) and `PROD` (for the prod target)
-
-Save the file. This ensures all dbt commands run against the objects you created in Step 2.
-
-### Step 5: Create an External Access Integration for dbt Packages
-
-Later in the lab, CoCo will run `dbt deps` to install packages from `hub.getdbt.com` and `codeload.github.com`. This requires an External Access Integration. Create one now so it's ready when needed.
-
-In the CoCo panel, enter:
-
-```
-Create an External Access Integration inside the NZBANK_HOL database called DBT_DEPS_EAI so I can run dbt deps, read the documentation
-```
-
-CoCo will create:
-1. **Network Rule:** `NZBANK_HOL.PUBLIC.DBT_DEPS_NETWORK_RULE` — allows egress to `hub.getdbt.com` and `codeload.github.com`
-2. **External Access Integration:** `DBT_DEPS_EAI` — enables the network rule
-
-> **Note:** If you receive an error stating that External Access Integrations are not enabled for trial accounts, ask an instructor for help — they may need to manually enable this feature for your account.
-
-### Customer Q&A
-
-**Q: Why Tasty Bytes and not our own banking data?**
-A: This lab is about the CoCo + dbt Projects mechanics, which are identical regardless of dataset. Using Snowflake's standard public demo data means nothing here depends on Kiwibank-specific access or masking. The mapping to your real CI/CD happens in Module 03.
-
-**Q: Do we need dbt installed locally?**
-A: No. dbt Projects on Snowflake runs a managed dbt runtime inside Snowflake. The Workspace you just created has everything you need already.
-
-**Q: Can several of us work in the same Workspace?**
-A: Personal Workspaces (used in this lab) are private to whoever creates them. For a shared team Workspace, create it inside a regular database/schema instead of your personal one, and share it with the relevant role.
-
 ---
 
 ## Module 02: Build with CoCo
+
+**Switch workspace:** In the Workspaces dropdown, switch to the **dbt-project** workspace. This is where your dbt project lives and where CoCo will generate models.
+
+### Step 0: Update profiles.yml
+
+The dbt project's `profiles.yml` needs to point at the database and warehouse you just created. Open `tasty_bytes_dbt_demo/profiles.yml` in the **dbt-project** workspace and update both the `dev` and `prod` targets:
+
+- `database:` → `NZBANK_HOL`
+- `schema:` → `DEV` (for the dev target) / `PROD` (for the prod target)
+- `warehouse:` → `NZBANK_WH`
+
+Save the file. (The `account` and `user` fields can stay as `'not needed'` — when dbt runs inside a Workspace, it inherits your active Snowflake session.)
 
 **Business Context:** This replaces days 1-3 of the old workflow — Bootstrap scripts, manual SQL on a VM, Copilot-assisted `schema.yml` authoring. CoCo does context-aware building: it scans your actual source tables, writes dbt-native SQL, adds tests, and validates output — all from the CoCo panel inside your Workspace.
 
@@ -211,6 +195,8 @@ Proceed with the plan. Create the model and schema.yml files, then run dbt
 build and validate the output row count.
 ```
 
+> **Tip:** When CoCo runs `dbt deps` or `dbt build`, you may be prompted to select an External Access Integration. Choose **`DBT_DEPS_EAI`** (created by the setup script) and click **Confirm**.
+
 Click **Keep All** on the generated files once you've reviewed them.
 
 ### Step 4: Validate
@@ -235,6 +221,55 @@ description and a range test for the new column.
 ```
 
 **What to look for:** CoCo updates the **model SQL and the YAML docs/tests in the same response** — this is the "rapid editing and optimization" pattern from Snowflake's [CoCo + dbt Projects video](https://www.youtube.com/watch?v=2g2RZZNm32k). Click **Keep All** once reviewed.
+
+### Step 6: Encode Team Standards with AGENTS.md
+
+CoCo in Snowsight automatically reads an `AGENTS.md` file from the root of your Workspace and applies its instructions to every conversation. This means you can encode your team's dbt modelling standards once, and CoCo will follow them by default — no need to repeat instructions in every prompt.
+
+**Create the file:**
+
+In your Workspace, create a new file called `AGENTS.md` at the root level (same directory as `dbt_project.yml`). Paste the following content:
+
+```markdown
+# dbt Modelling Standards
+
+## Required for all models
+- Always set materialization explicitly in the model config block
+- Add `_loaded_at` timestamp column using `{{ dbt.current_timestamp() }}` to every staging model
+- Every primary key must have `not_null` + `unique` tests in schema.yml
+- Use `{{ ref() }}` for all model references — never hardcode table names
+- Use `{{ source() }}` for raw tables
+
+## Naming Conventions
+- Staging models: `stg_<source>__<entity>`
+- Marts: `fct_` (facts) or `dim_` (dimensions)
+- Surrogate keys: `<model_name>_key` using `{{ dbt_utils.generate_surrogate_key() }}`
+
+## Incremental Models
+- Must include `unique_key`, `on_schema_change='append_new_columns'`, and `merge_exclude_columns=['_loaded_at']`
+- Use `{% if is_incremental() %}` with an ingestion-timestamp filter where available
+```
+
+> **Note:** A more comprehensive version of this file is available in the lab GitHub repo under `assets/AGENTS.md`. For this lab, the shorter version above is enough to demonstrate the feature.
+
+**Ask CoCo to improve your existing model:**
+
+```
+Review weekly_truck_performance against the standards in AGENTS.md. Apply any
+changes needed to bring it into compliance.
+```
+
+**What to look for:** CoCo should read the `AGENTS.md` file automatically and apply changes such as:
+- Adding a `_loaded_at` column if missing
+- Adding explicit materialization config
+- Adding `not_null` / `unique` tests to the schema.yml for the primary key
+- Renaming any columns that don't follow snake_case
+
+Click **Keep All** once you've reviewed the diff.
+
+**Why this matters:** In production, you'd commit `AGENTS.md` to your Git repo alongside your dbt project. Every engineer on the team gets the same standards enforced by CoCo — no manual code review needed for convention compliance. This is the equivalent of a team-wide linter, but for dbt architectural patterns, not just syntax.
+
+---
 
 ### (Optional) Go Further — Smart Troubleshooting
 
@@ -268,10 +303,11 @@ A: Yes — Copilot autocompletes syntax without knowing your actual Snowflake sc
 ### Step 1: Deploy
 
 In the Workspace toolbar, select **Connect > Deploy dbt project**:
-1. Role: `ACCOUNTADMIN`
-2. Database/schema: `NZBANK_HOL.PROD`
+1. Location: `NZBANK_HOL` → `PROD`
+2. Select **Create dbt project**
 3. Name: `NZBANK_DBT_PROJECT`
-4. Click **Deploy**
+4. External Access Integration: select **`DBT_DEPS_EAI`** (required so the deployed project can run `dbt deps` to fetch packages)
+5. Click **Deploy**
 
 The Output tab shows the exact `CREATE DBT PROJECT` SQL it ran — this is what a CI/CD pipeline would call via `snow dbt deploy` instead. That reference SQL is also in [`assets/task_and_alert.sql`](assets/task_and_alert.sql) if you'd rather run it directly.
 
@@ -285,17 +321,19 @@ SHOW DBT PROJECTS IN SCHEMA NZBANK_HOL.PROD;
 
 ### Step 2: Schedule with a Task and Alert
 
-Open [`assets/task_and_alert.sql`](assets/task_and_alert.sql) in a SQL worksheet. Before running, replace `<YOUR EMAIL HERE>` in both the notification integration and the alert section with your verified Snowsight email address (verify under user icon > Profile if you haven't already).
+1. In the Workspaces dropdown, switch to the **github-instructions** workspace
+2. Open `assets/task_and_alert.sql`
+3. Replace `<YOUR EMAIL HERE>` (appears twice) with your verified Snowsight email address (verify under user icon > Profile if you haven't already)
+4. Click **Run All**
 
-After updating your email in the SQL script, run all statements in [`assets/task_and_alert.sql`](assets/task_and_alert.sql). This creates:
+This creates:
 
-1. A **run** task (`NZBANK_RUN_DBT_TASK`) scheduled daily at 06:00 UTC
-2. A **test** task (`NZBANK_TEST_DBT_TASK`) chained to execute only after the run task succeeds
-3. A failure **alert** that emails you when either task fails
+1. A **build** task (`NZBANK_DBT_BUILD_TASK`) scheduled daily at 06:00 UTC — runs models and tests in DAG order, failing early if any test fails
+2. A failure **alert** that emails you when the task fails
 
-The two tasks use an `AFTER` dependency so that tests never run against stale models. `EXECUTE DBT PROJECT` does not support the `build` subcommand, which is why `run` and `test` are issued as separate chained tasks.
+`build` is the dbt equivalent of `run` + `test` in a single pass — it executes each model and its downstream tests together in topological order, so a failing test halts the pipeline before dependent models see bad data.
 
-> **Note:** The Snowsight UI (**Project Details > Create Schedule**) can create individual scheduled tasks, but does not support the `AFTER` chaining required here. Use SQL for this step.
+> **Note:** You can also create this schedule via the Snowsight UI (**Project Details > Create Schedule**). The SQL file is provided for reference and for the CI/CD mapping discussion.
 
 ### Step 3: Monitor — Snowsight Is the Operations Console
 
@@ -319,7 +357,7 @@ SELECT *
 FROM TABLE(INFORMATION_SCHEMA.TASK_HISTORY(
   SCHEDULED_TIME_RANGE_START => DATEADD('hour', -1, CURRENT_TIMESTAMP())
 ))
-WHERE NAME IN ('NZBANK_RUN_DBT_TASK', 'NZBANK_TEST_DBT_TASK');
+WHERE NAME = 'TB_DBT_BUILD_TASK';
 ```
 
 ### Best Practices
@@ -369,7 +407,7 @@ If you can answer all four, this lab has done its job.
 
 ## Module 04: Lab Cleanup
 
-**Business Context:** Every object this lab created is scoped under the `NZBANK_` prefix specifically so cleanup is a single, complete pass — no orphaned warehouses or tasks left running (and billing) after the session ends.
+**Business Context:** Every object this lab created is scoped under the `NZBANK_` prefix so cleanup is a single, complete pass — no orphaned warehouses or tasks left running (and billing) after the session ends.
 
 ### Step 1: Run Cleanup
 
@@ -390,7 +428,7 @@ Both should return zero rows.
 
 ### Notes for Instructors
 
-If running this lab for a group sharing an account, confirm each participant used a unique suffix (e.g. `NZBANK_<initials>_HOL`) before this module, or coordinate a single shared cleanup pass at the end rather than each participant dropping shared objects independently.
+If running this lab for a group sharing an account, coordinate a single shared cleanup pass at the end rather than each participant dropping shared objects independently.
 
 ---
 
@@ -518,7 +556,7 @@ A short, read-only round-up — not a hands-on exercise — for engineers who wa
 | Warehouse | `NZBANK_WH` |
 | Database | `NZBANK_HOL` |
 | dbt project object | `NZBANK_HOL.PROD.NZBANK_DBT_PROJECT` |
-| Task | `NZBANK_HOL.PROD.NZBANK_RUN_DBT_TASK` |
+| Task | `NZBANK_HOL.prod.NZBANK_DBT_BUILD_TASK` |
 
 ## File Structure
 
