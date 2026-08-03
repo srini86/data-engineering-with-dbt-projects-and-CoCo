@@ -109,7 +109,6 @@ This re-processes the most recent period to catch late-arriving data. It is less
 ## Testing
 - Every primary key must have `not_null` + `unique` tests
 - Every foreign key must have a `relationships` test
-- Add `accepted_values` for any enum/flag columns
 
 ## SQL Style
 
