@@ -149,6 +149,31 @@ The dbt project's `profiles.yml` needs to point at the database and warehouse yo
 
 Save the file. (The `account` and `user` fields can stay as `'not needed'` — when dbt runs inside a Workspace, it inherits your active Snowflake session.)
 
+### Step 0b: Verify the sources database
+
+Open `tasty_bytes_dbt_demo/models/staging/__sources.yml`. Confirm that the `database:` field is set to `nzbank_hol`:
+
+```yaml
+sources:
+  - name: tb_101
+    database: nzbank_hol
+    schema: RAW
+```
+
+This tells dbt where to *read* the raw source tables from. It should already be set correctly — if not, update it to `nzbank_hol` and save.
+
+### Step 0c: Enable dbt_utils
+
+Open `tasty_bytes_dbt_demo/packages.yml` in the **dbt-project** workspace. The contents are commented out by default. **Uncomment** the file so that `dbt_utils` will be installed when `dbt deps` runs:
+
+```yaml
+packages:
+  - package: dbt-labs/dbt_utils
+    version: [">=0.8.0", "<2.0.0"]
+```
+
+Save the file. CoCo will run `dbt deps` automatically when it builds the model — this ensures `dbt_utils` macros (like `generate_surrogate_key`) are available.
+
 **Business Context:** This replaces days 1-3 of the old workflow — Bootstrap scripts, manual SQL on a VM, Copilot-assisted `schema.yml` authoring. CoCo does context-aware building: it scans your actual source tables, writes dbt-native SQL, adds tests, and validates output — all from the CoCo panel inside your Workspace.
 
 ### Step 1: Discover the Skill (optional but recommended)
@@ -228,7 +253,7 @@ CoCo in Snowsight automatically reads an `AGENTS.md` file from the root of your 
 
 **Create the file:**
 
-In your Workspace, create a new file called `AGENTS.md` at the root level (same directory as `dbt_project.yml`). Paste the following content:
+In your Workspace, create a new file called `AGENTS.md` at the root level (same directory as `README.md`). Paste the following content:
 
 ```markdown
 # dbt Modelling Standards
@@ -357,7 +382,7 @@ SELECT *
 FROM TABLE(INFORMATION_SCHEMA.TASK_HISTORY(
   SCHEDULED_TIME_RANGE_START => DATEADD('hour', -1, CURRENT_TIMESTAMP())
 ))
-WHERE NAME = 'TB_DBT_BUILD_TASK';
+WHERE NAME = 'NZBANK_DBT_BUILD_TASK';
 ```
 
 ### Best Practices
