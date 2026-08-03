@@ -56,7 +56,7 @@ CREATE OR REPLACE ALERT NZBANK_HOL.prod.NZBANK_DBT_ALERT
             SCHEDULED_TIME_RANGE_END => SNOWFLAKE.ALERT.SCHEDULED_TIME(),
             ERROR_ONLY => TRUE
         ))
-        WHERE DATABASE_NAME = 'TASTY_BYTES_DBT_DB'
+        WHERE DATABASE_NAME = 'NZBANK_HOL'
     ))
     THEN
         BEGIN
@@ -66,11 +66,11 @@ CREATE OR REPLACE ALERT NZBANK_HOL.prod.NZBANK_DBT_ALERT
             );
             CALL SYSTEM$SEND_SNOWFLAKE_NOTIFICATION(
                 SNOWFLAKE.NOTIFICATION.TEXT_HTML(
-                    'Tasks ' || :failed_tasks || ' failed in TASTY_BYTES_DBT_DB since ' ||
+                    'Tasks ' || :failed_tasks || ' failed in NZBANK_HOL since ' ||
                     (GREATEST(TIMEADD('day', -1, CURRENT_TIMESTAMP()), SNOWFLAKE.ALERT.LAST_SUCCESSFUL_SCHEDULED_TIME()))
                 ),
                 SNOWFLAKE.NOTIFICATION.EMAIL_INTEGRATION_CONFIG(
-                    'TB_DBT_EMAIL_NOTIFICATIONS',
+                    'NZBANK_EMAIL_NOTIFICATIONS',
                     'dbt Pipeline Alert',
                     ARRAY_CONSTRUCT('<YOUR EMAIL HERE>')
                 )
@@ -85,7 +85,7 @@ EXECUTE ALERT NZBANK_HOL.prod.NZBANK_DBT_ALERT;
 -- Optional check for alert task history
 SELECT *
 FROM TABLE(NZBANK_HOL.INFORMATION_SCHEMA.ALERT_HISTORY(
-    ALERT_NAME => 'TB_DBT_ALERT',
+    ALERT_NAME => 'NZBANK_DBT_ALERT',
     SCHEDULED_TIME_RANGE_START => DATEADD('hour', -1, CURRENT_TIMESTAMP())
 ))
 ORDER BY SCHEDULED_TIME DESC;
