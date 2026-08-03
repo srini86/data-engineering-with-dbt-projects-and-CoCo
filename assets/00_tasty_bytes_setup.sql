@@ -137,7 +137,4 @@ COPY INTO NZBANK_HOL.raw.customer_loyalty FROM @NZBANK_HOL.public.s3load/raw_cus
 COPY INTO NZBANK_HOL.raw.order_header FROM @NZBANK_HOL.public.s3load/raw_pos/order_header/;
 COPY INTO NZBANK_HOL.raw.order_detail FROM @NZBANK_HOL.public.s3load/raw_pos/order_detail/;
 
--- Scale warehouse back down for the rest of the lab
-ALTER WAREHOUSE NZBANK_WH SET WAREHOUSE_SIZE = 'XSMALL';
-
 SELECT 'NZBANK_HOL setup is complete' AS note;

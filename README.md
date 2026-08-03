@@ -119,7 +119,7 @@ Now, let's set up our database/schema.
 
 This creates:
 - Database `NZBANK_HOL` with schemas `RAW`, `DEV`, `PROD`
-- Warehouse `NZBANK_WH` (XSmall, auto-suspend)
+- Warehouse `NZBANK_WH` (XLarge, auto-suspend)
 - Eight source tables in `RAW` loaded from Snowflake's public Tasty Bytes dataset (`country`, `franchise`, `location`, `menu`, `truck`, `order_header`, `order_detail`, `customer_loyalty`)
 
 ### Validate
