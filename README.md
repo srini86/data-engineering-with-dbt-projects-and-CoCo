@@ -84,11 +84,37 @@ Confirm it's connected:
 What databases do I have access to?
 ```
 
-### Step 2: Load the Tasty Bytes Source Data
+### Step 2: Set up your Git Workspaces
 
-1. In Snowsight, go to **Projects > Workspaces**
-2. Create a new **SQL File**
-3. Open [`assets/00_tasty_bytes_setup.sql`](assets/00_tasty_bytes_setup.sql) from this repo, copy its contents, and paste into the new SQL file
+We will need to connect to **two** GitHub repositories for this lab:
+
+| Workspace Name | Repository URL | Purpose |
+|----------------|---------------|----------|
+| `github-instructions` | `https://github.com/srini86/data-engineering-with-dbt-projects-and-CoCo.git` | Lab instructions and setup scripts |
+| `dbt-project` | `https://github.com/Snowflake-Labs/getting-started-with-dbt-on-snowflake.git` | The dbt project |
+
+For each repository, follow these steps to connect:
+1. In **Projects > Workspaces**, click the 'Create Workspace' (+) button → Create new **Git Workspace**
+2. Repository URL: paste the URL from the table above
+3. Workspace Name: use the name from the table above
+4. If you see "No API integration available", click **+ API Integration** and fill in:
+   - **Name:** `github`
+   - **Allowed prefixes:** `https://github.com`
+   - **Allowed authentication secrets:** All
+   - **OAuth authentication:** leave unchecked
+   - Click **Create**
+5. Select the `github` API integration
+6. Select **Public Repository**
+7. Click **Create**
+
+Snowsight pulls the repo directly into a browser-based Workspace. (Public repos are pull-only in a Workspace; that's fine for this lab since you're not pushing changes back.)
+
+### Step 3: Load the Tasty Bytes Source Data
+
+Now, let's set up our database/schema.
+
+1. In the Workspaces dropdown (top left of the editor), switch to the **github-instructions** workspace
+2. Open `assets/00_tasty_bytes_setup.sql`
 4. Click **Run All**
 
 This creates:
@@ -107,47 +133,11 @@ SELECT COUNT(*) FROM tasty_bytes_dbt_db.RAW.ORDER_HEADER;
 
 You should see all 8 source tables with data loaded.
 
-### Step 3: Pull the dbt Project into a Workspace
-
-1. In **Projects > Workspaces**, click the 'Create Workspace' (+) button → Create new **Git Workspace**
-2. Repository URL: `https://github.com/Snowflake-Labs/getting-started-with-dbt-on-snowflake.git`
-3. Workspace Name: `tasty_bytes_dbt_workspace`
-4. If you see "No API integration available", click **+ API Integration** and fill in:
-   - **Name:** `github`
-   - **Allowed prefixes:** `https://github.com`
-   - **Allowed authentication secrets:** All
-   - **OAuth authentication:** leave unchecked
-   - Click **Create**
-5. Select the `github` API integration
-6. Select **Public Repository**
-7. Click **Create**
-
-No `git clone`, no terminal — Snowsight pulls the repo directly into a browser-based Workspace. (Public repos are pull-only in a Workspace; that's fine for this lab since you're not pushing changes back.)
-
-### Step 4: Update `profiles.yml`
-
-The dbt project from the Snowflake-Labs repo ships with default database/warehouse names that don't match this lab. Open `profiles.yml` in the Workspace and update:
-
-- `database:` → `tasty_bytes_dbt_db`
-- `warehouse:` → `tasty_bytes_dbt_wh`
-- `schema:` → `DEV` (for the dev target) and `PROD` (for the prod target)
-
-Save the file. This ensures all dbt commands run against the objects you created in Step 2.
-
-### Customer Q&A
-
-**Q: Why Tasty Bytes and not our own banking data?**
-A: This lab is about the CoCo + dbt Projects mechanics, which are identical regardless of dataset. Using Snowflake's standard public demo data means nothing here depends on Kiwibank-specific access or masking. The mapping to your real CI/CD happens in Module 03.
-
-**Q: Do we need dbt installed locally?**
-A: No. dbt Projects on Snowflake runs a managed dbt runtime inside Snowflake. The Workspace you just created has everything you need already.
-
-**Q: Can several of us work in the same Workspace?**
-A: Personal Workspaces (used in this lab) are private to whoever creates them. For a shared team Workspace, create it inside a regular database/schema instead of your personal one, and share it with the relevant role.
-
 ---
 
 ## Module 02: Build with CoCo
+
+**Switch workspace:** In the Workspaces dropdown, switch to the **dbt-project** workspace. This is where your dbt project lives and where CoCo will generate models.
 
 **Business Context:** This replaces days 1-3 of the old workflow — Bootstrap scripts, manual SQL on a VM, Copilot-assisted `schema.yml` authoring. CoCo does context-aware building: it scans your actual source tables, writes dbt-native SQL, adds tests, and validates output — all from the CoCo panel inside your Workspace.
 
