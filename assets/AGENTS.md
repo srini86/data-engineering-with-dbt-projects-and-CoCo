@@ -99,7 +99,6 @@ This re-processes the most recent period to catch late-arriving data. It is less
 ## Naming Conventions
 - Staging models: `stg_<source>__<entity>`
 - Intermediate: `int_<entity>_<verb>`
-- Marts: `fct_` (facts) or `dim_` (dimensions)
 
 ## Macros
 - Use `{{ ref() }}` for all model references — never hardcode table names
