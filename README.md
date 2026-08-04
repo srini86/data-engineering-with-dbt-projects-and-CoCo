@@ -137,6 +137,8 @@ You should see all 8 source tables with data loaded.
 
 ## Module 02: Build with CoCo
 
+**Business Context:** This replaces days 1-3 of the old workflow — Bootstrap scripts, manual SQL on a VM, Copilot-assisted `schema.yml` authoring. CoCo does context-aware building: it scans your actual source tables, writes dbt-native SQL, adds tests, and validates output — all from the CoCo panel inside your Workspace.
+
 **Switch workspace:** In the Workspaces dropdown, switch to the **dbt-project** workspace. This is where your dbt project lives and where CoCo will generate models.
 
 ### Step 0: Update profiles.yml
@@ -151,7 +153,7 @@ Save the file. (The `account` and `user` fields can stay as `'not needed'` — w
 
 ### Step 0b: Verify the sources database
 
-Open `tasty_bytes_dbt_demo/models/staging/__sources.yml`. Confirm that the `database:` field is set to `nzbank_hol`:
+Open `tasty_bytes_dbt_demo/models/staging/__sources.yml`. Update the `database:` field and set it to `nzbank_hol`:
 
 ```yaml
 sources:
@@ -160,17 +162,25 @@ sources:
     schema: RAW
 ```
 
-This tells dbt where to *read* the raw source tables from. It should already be set correctly — if not, update it to `nzbank_hol` and save.
+This tells dbt where to *read* the raw source tables from.
 
 ### Step 0c: Enable dbt_utils
 
 Open `tasty_bytes_dbt_demo/packages.yml` in the **dbt-project** workspace. The contents are commented out by default. **Uncomment** the file so that `dbt_utils` will be installed when `dbt deps` runs.
 
+```yaml
+packages:
+  - package: dbt-labs/dbt_utils
+    version: 1.3.0 
+  - package: Snowflake-Labs/dbt_semantic_view
+    version: 1.0.3
+```
+
 CoCo will run `dbt deps` automatically when it builds the model — this ensures `dbt_utils` macros (like `generate_surrogate_key`) are available.
 
 > **Quick tip:** Highlight multiple lines and press CMD + / (Mac) or CTRL + / (Windows) to quickly comment or uncomment code.
 
-**Business Context:** This replaces days 1-3 of the old workflow — Bootstrap scripts, manual SQL on a VM, Copilot-assisted `schema.yml` authoring. CoCo does context-aware building: it scans your actual source tables, writes dbt-native SQL, adds tests, and validates output — all from the CoCo panel inside your Workspace.
+> **Note on External Access Integrations (EAI):** Several steps in this lab reference an EAI called `DBT_DEPS_EAI`, which allows `dbt deps` to fetch packages from the internet. If your account restricts EAI creation or you encounter permission errors setting one up, **this is not a blocker for the lab.** The workaround is to comment out `packages.yml` (so `dbt deps` has nothing to fetch) and avoid using `dbt_utils` macros in your model — use plain SQL equivalents instead (e.g., a `CONCAT` of key columns instead of `generate_surrogate_key`). The core learning outcomes (model generation, deployment, scheduling) work without external packages.
 
 ### Step 1: Discover the Skill (optional but recommended)
 
@@ -238,12 +248,15 @@ FILE 2: tasty_bytes_dbt_demo/models/marts/schema.yml
 - Model entry for weekly_truck_performance
 - Tests: not_null on TRUCK_ID, TRUCK_BRAND_NAME, WEEK_START
 - Unique test on the combination of TRUCK_ID + WEEK_START (use
-  dbt_utils.unique_combination_of_columns)
-- accepted_values test on TRUCK_BRAND_NAME using values from the truck
-  source
+  dbt_utils.unique_combination_of_columns if dbt_utils is available,
+  otherwise use separate not_null + unique tests on each key column)
 
 After creating both files, run dbt deps then dbt build --select
 weekly_truck_performance.
+If dbt deps fails (e.g., EAI/network error), skip it — comment out
+packages.yml, remove any dbt_utils macro calls from the model (use plain
+SQL equivalents like CONCAT or MD5 for surrogate keys), and run dbt build
+directly without dbt deps. Do not retry dbt deps more than once.
 Report: (1) build pass/fail, (2) test pass/fail count, (3) row count of
 the output table.
 ```
@@ -253,11 +266,16 @@ the output table.
 ```
 Execute the plan now. Create both files exactly as specified, then run dbt
 deps followed by dbt build --select weekly_truck_performance.
+If dbt deps fails, skip it — comment out packages.yml, remove dbt_utils
+references from the model, and run dbt build directly. Do not retry dbt
+deps more than once.
 Report: (1) build pass/fail, (2) test pass/fail count, (3) SELECT COUNT(*)
 from the resulting table.
 ```
 
 > **Tip:** When CoCo runs `dbt deps` or `dbt build`, you may be prompted to select an External Access Integration. Choose **`DBT_DEPS_EAI`** (created by the setup script) and click **Confirm**.
+>
+> **If EAI setup failed or is unavailable:** Comment out `packages.yml` entirely (so `dbt deps` is a no-op), then remove any `dbt_utils` macro calls from your model (e.g., replace `dbt_utils.generate_surrogate_key(...)` with a plain `CONCAT(...)` or `MD5(...)` expression, and replace `dbt_utils.unique_combination_of_columns` with separate `not_null` + `unique` tests on each key column). CoCo will still generate and build the model — you just lose the convenience macros.
 
 Click **Keep All** on the generated files once you've reviewed them.
 
@@ -318,7 +336,6 @@ In your Workspace, create a new file called `AGENTS.md` at the root level (same 
 
 ## Naming Conventions
 - Staging models: `stg_<source>__<entity>`
-- Marts: `fct_` (facts) or `dim_` (dimensions)
 - Surrogate keys: `<model_name>_key` using `{{ dbt_utils.generate_surrogate_key() }}`
 
 ## Incremental Models
@@ -391,6 +408,7 @@ In the Workspace toolbar, select **Connect > Deploy dbt project**:
 2. Select **Create dbt project**
 3. Name: `NZBANK_DBT_PROJECT`
 4. External Access Integration: select **`DBT_DEPS_EAI`** (required so the deployed project can run `dbt deps` to fetch packages)
+   - **If EAI is unavailable:** You can still deploy without an EAI if `packages.yml` is commented out (i.e., the project has no external package dependencies). Leave the EAI field blank and proceed — deployment will succeed as long as the project doesn't need to fetch packages at runtime.
 5. Click **Deploy**
 
 The Output tab shows the exact `CREATE DBT PROJECT` SQL it ran — this is what a CI/CD pipeline would call via `snow dbt deploy` instead. That reference SQL is also in [`assets/task_and_alert.sql`](assets/task_and_alert.sql) if you'd rather run it directly.
