@@ -164,15 +164,11 @@ This tells dbt where to *read* the raw source tables from. It should already be 
 
 ### Step 0c: Enable dbt_utils
 
-Open `tasty_bytes_dbt_demo/packages.yml` in the **dbt-project** workspace. The contents are commented out by default. **Uncomment** the file so that `dbt_utils` will be installed when `dbt deps` runs:
+Open `tasty_bytes_dbt_demo/packages.yml` in the **dbt-project** workspace. The contents are commented out by default. **Uncomment** the file so that `dbt_utils` will be installed when `dbt deps` runs.
 
-```yaml
-packages:
-  - package: dbt-labs/dbt_utils
-    version: [">=0.8.0", "<2.0.0"]
-```
+CoCo will run `dbt deps` automatically when it builds the model — this ensures `dbt_utils` macros (like `generate_surrogate_key`) are available.
 
-Save the file. CoCo will run `dbt deps` automatically when it builds the model — this ensures `dbt_utils` macros (like `generate_surrogate_key`) are available.
+> **Quick tip:** Highlight multiple lines and press CMD + / (Mac) or CTRL + / (Windows) to quickly comment or uncomment code.
 
 **Business Context:** This replaces days 1-3 of the old workflow — Bootstrap scripts, manual SQL on a VM, Copilot-assisted `schema.yml` authoring. CoCo does context-aware building: it scans your actual source tables, writes dbt-native SQL, adds tests, and validates output — all from the CoCo panel inside your Workspace.
 
@@ -191,34 +187,74 @@ What does the dbt-projects-on-snowflake skill do?
 ### Step 2: Discover the Source Data
 
 ```
-Find all tables in NZBANK_HOL.RAW and give me a one-line description of each.
+List every table in NZBANK_HOL.RAW as a markdown table with exactly these columns:
+| Table Name | Row Count | Description (max 15 words) |
+Sort alphabetically by table name.
 ```
 
 ```
-Compare order_header, order_detail, menu, and truck. What are the join keys, and
-what would a sensible grain be for a "weekly truck performance" mart?
+For tables NZBANK_HOL.RAW.ORDER_HEADER, ORDER_DETAIL, MENU, and TRUCK, answer
+in exactly 3 numbered sections:
+
+1. **Join Path** — show how these four tables connect, one join per line,
+   format: TABLE_A.column → TABLE_B.column
+2. **Grain** — state the grain for a "weekly truck performance" mart in one
+   sentence
+3. **Measures** — list 4 business measures this mart should calculate: total
+   revenue, total orders, average order value, and count of distinct menu
+   items sold. For each, name which source table provides the data.
+
+No additional commentary beyond these 3 sections.
 ```
 
-**What to look for:** an accurate description of each table and a clear join plan — the same design conversation you'd have in a PR review, compressed into two prompts.
+**What to look for:** a consistent markdown table for discovery, and a structured 3-section join analysis — the same design conversation you'd have in a PR review, compressed into two prompts.
 
 ### Step 3: Turn On Plan Mode, Then Generate the Model
 
 Toggle **Plan Mode** in the CoCo panel — this makes CoCo think through a multi-step task and show you the plan before writing anything.
 
 ```
-Using the dbt project in tasty_bytes_dbt_demo/, create a model called
-weekly_truck_performance in models/marts. Using order_header, order_detail,
-menu, and truck, calculate total revenue, total orders, and average order
-value by truck, truck brand and week. Add a schema.yml file in models/marts
-with tests: not_null and unique on the key columns, and accepted_values
-where relevant.
+/dbt-projects-on-snowflake
+
+Using the dbt project rooted at tasty_bytes_dbt_demo/, create these two files:
+
+FILE 1: tasty_bytes_dbt_demo/models/marts/weekly_truck_performance.sql
+- Materialized as table
+- Source from the existing staging models in this project (use ref(), not
+  raw table names)
+- Join: orders to their line items, then to the menu for pricing, then to
+  the truck for brand info
+- Group by: truck ID, truck brand name, and week (truncate the order
+  timestamp to week)
+- Output columns (use these exact names):
+  - TRUCK_ID
+  - TRUCK_BRAND_NAME
+  - WEEK_START
+  - TOTAL_REVENUE — total sales revenue for that truck and week
+  - TOTAL_ORDERS — count of distinct orders
+  - AVG_ORDER_VALUE — revenue divided by order count
+
+FILE 2: tasty_bytes_dbt_demo/models/marts/schema.yml
+- Model entry for weekly_truck_performance
+- Tests: not_null on TRUCK_ID, TRUCK_BRAND_NAME, WEEK_START
+- Unique test on the combination of TRUCK_ID + WEEK_START (use
+  dbt_utils.unique_combination_of_columns)
+- accepted_values test on TRUCK_BRAND_NAME using values from the truck
+  source
+
+After creating both files, run dbt deps then dbt build --select
+weekly_truck_performance.
+Report: (1) build pass/fail, (2) test pass/fail count, (3) row count of
+the output table.
 ```
 
 **What to look for:** CoCo's plan should reference the actual staging models already in this dbt project (not raw table names) — that's what "dbt-native from the first keystroke" means. Review the plan, then turn Plan Mode off and tell CoCo to proceed:
 
 ```
-Proceed with the plan. Create the model and schema.yml files, then run dbt
-build and validate the output row count.
+Execute the plan now. Create both files exactly as specified, then run dbt
+deps followed by dbt build --select weekly_truck_performance.
+Report: (1) build pass/fail, (2) test pass/fail count, (3) SELECT COUNT(*)
+from the resulting table.
 ```
 
 > **Tip:** When CoCo runs `dbt deps` or `dbt build`, you may be prompted to select an External Access Integration. Choose **`DBT_DEPS_EAI`** (created by the setup script) and click **Confirm**.
@@ -241,9 +277,23 @@ Run dbt test on weekly_truck_performance and summarize the results.
 ### Step 5: Rapid Editing — Add a Calculated Column
 
 ```
-Add a profit_margin calculation to weekly_truck_performance, using
-cost_of_goods_usd and sale_price_usd from menu. Update schema.yml with a
-description and a range test for the new column.
+/dbt-projects-on-snowflake
+
+In tasty_bytes_dbt_demo/models/marts/weekly_truck_performance.sql, add a new
+column:
+- Name: PROFIT_MARGIN
+- Business logic: the proportion of revenue that is profit, calculated as
+  total revenue minus total cost of goods, divided by total revenue. Use
+  cost_of_goods_usd from the menu table as the unit cost. Return as a
+  decimal between 0 and 1. Handle division by zero gracefully.
+
+In tasty_bytes_dbt_demo/models/marts/schema.yml, add:
+- Column entry for PROFIT_MARGIN with description: "Gross profit margin as
+  a decimal (0-1). Revenue minus COGS divided by revenue."
+- Test: dbt_utils.accepted_range with min_value=0 and max_value=1
+
+After editing both files, run dbt build --select weekly_truck_performance.
+Report build status and show 5 sample rows including the new column.
 ```
 
 **What to look for:** CoCo updates the **model SQL and the YAML docs/tests in the same response** — this is the "rapid editing and optimization" pattern from Snowflake's [CoCo + dbt Projects video](https://www.youtube.com/watch?v=2g2RZZNm32k). Click **Keep All** once reviewed.
@@ -281,8 +331,16 @@ In your Workspace, create a new file called `AGENTS.md` at the root level (same 
 **Ask CoCo to improve your existing model:**
 
 ```
-Review weekly_truck_performance against the standards in AGENTS.md. Apply any
-changes needed to bring it into compliance.
+Read the AGENTS.md file in this workspace root. Then review
+tasty_bytes_dbt_demo/models/marts/weekly_truck_performance.sql and its
+schema.yml against every rule in AGENTS.md.
+
+Output a checklist with this exact format for each rule:
+- [x] Rule name — passes (no change needed)
+- [ ] Rule name — FAILS: <what's wrong> → <fix you will apply>
+
+Then apply all fixes to both files and run dbt build --select
+weekly_truck_performance to confirm nothing breaks. Report build status.
 ```
 
 **What to look for:** CoCo should read the `AGENTS.md` file automatically and apply changes such as:
@@ -371,7 +429,12 @@ This creates:
 You can also ask CoCo directly instead of navigating:
 
 ```
-Show me the run history for NZBANK_DBT_PROJECT and flag any failed runs.
+/dbt-projects-on-snowflake
+
+Query the run history for dbt project NZBANK_HOL.PROD.NZBANK_DBT_PROJECT.
+Show results as a markdown table with columns: Run ID, Start Time,
+Duration (seconds), Status, Error Message (if any).
+Prefix any failed rows with a warning indicator.
 ```
 
 ### Validate
@@ -471,10 +534,25 @@ The core lab ends at Module 04. Everything below is optional — for teams with 
 CoCo has a bundled `semantic-view` skill. Use it straight against the mart table:
 
 ```
-Using the semantic-view skill, create a semantic view called
-SV_TRUCK_PERFORMANCE over NZBANK_HOL.DEV.WEEKLY_TRUCK_PERFORMANCE.
-Dimensions: truck_id, truck_brand_name, sales_month.
-Metrics: total revenue, total orders, average order value, profit margin.
+/semantic-view
+
+Create a semantic view with these specifications:
+- Name: NZBANK_HOL.DEV.SV_TRUCK_PERFORMANCE
+- Base table: NZBANK_HOL.DEV.WEEKLY_TRUCK_PERFORMANCE
+- Time dimension: WEEK_START (granularities: week, month, quarter)
+- Dimensions: TRUCK_ID (number), TRUCK_BRAND_NAME (string)
+- Metrics:
+  - total_revenue: sum of weekly revenue, description "Total revenue across
+    selected period"
+  - total_orders: sum of weekly orders, description "Total order count
+    across selected period"
+  - avg_order_value: average of the per-week averages, description "Average
+    order value"
+  - profit_margin: average of weekly margins, description "Average profit
+    margin (0-1)"
+
+Show me the complete DDL before executing it. Do not execute until I
+confirm.
 ```
 
 Validate it with a natural-language question via Cortex Analyst:
@@ -490,11 +568,23 @@ Ask Cortex Analyst: "Which truck brand had the highest profit margin last month?
 Snowflake's [best practices for dbt Projects](https://docs.snowflake.com/en/user-guide/data-engineering/dbt-projects-on-snowflake-best-practices) recommend defining semantic views **inside your dbt project** rather than creating them manually, using the [`Snowflake-Labs/dbt_semantic_view`](https://hub.getdbt.com/Snowflake-Labs/dbt_semantic_view/latest/) package. This gets your semantic layer the same governance Module 03 gave your model: version-controlled in Git, reviewed in the same PR process, reproducible across dev/staging/prod.
 
 ```
-Add the Snowflake-Labs/dbt_semantic_view package to packages.yml, run dbt deps,
-then create a model semantic_truck_performance.sql with
-{{ config(materialized='semantic_view') }} that wraps
-weekly_truck_performance with the same dimensions and metrics as before.
-Run dbt build.
+/dbt-projects-on-snowflake
+
+Do the following steps in order:
+
+1. Add the Snowflake-Labs/dbt_semantic_view package to
+   tasty_bytes_dbt_demo/packages.yml (latest compatible version)
+2. Run dbt deps
+3. Create file: tasty_bytes_dbt_demo/models/marts/semantic_truck_performance.sql
+   - Use materialized='semantic_view' config
+   - Wrap weekly_truck_performance with:
+     - Time dimension: WEEK_START (granularities: week, month, quarter)
+     - Dimensions: TRUCK_ID, TRUCK_BRAND_NAME
+     - Metrics: total_revenue (sum), total_orders (sum), avg_order_value
+       (average), profit_margin (average)
+   - Use the dbt_semantic_view package's Jinja syntax
+4. Run dbt build --select semantic_truck_performance
+5. Report build status
 ```
 
 **What to look for:** the semantic view now lives as a `.sql` file in your dbt project — the same `dbt build`/deploy/CI-CD story from Module 03 applies to it.
@@ -518,15 +608,29 @@ A: It gives every consumer (Cortex Analyst, Cortex Agents, and — depending on 
 In the CoCo panel, enter the following prompt to create the skill:
 
 ```
-Walk me through building a custom CoCo skill called dbt-change-plan.
-It should take a business-requirements file and a target dbt model, and
-always return, in this order:
-1. Summary of requested changes
-2. Source-to-model mapping
-3. Open questions or assumptions that need review before building
-4. The dbt change: model SQL delta + schema.yml delta
-5. Validation queries to confirm the change worked
-Make it a project skill.
+Create a custom CoCo project skill with these specifications:
+
+- Skill name: dbt-change-plan
+- File location: .snowflake/cortex/skills/dbt-change-plan/SKILL.md
+- Description: "Takes a business-requirements file and a target dbt model,
+  produces a structured change plan."
+
+The skill MUST instruct CoCo to always produce exactly these 5 numbered
+sections, in this order, every time the skill is invoked:
+
+1. **Summary of Requested Changes** — bullet list, one bullet per
+   requirement, max 2 sentences each
+2. **Source-to-Model Mapping** — markdown table: Requirement ID | Source
+   Column(s) | Target Column Name | Transformation (plain English)
+3. **Open Questions** — numbered list of assumptions needing human review
+   before implementation
+4. **dbt Change** — two fenced code blocks: (a) the updated model SQL,
+   (b) the updated schema.yml entries
+5. **Validation Queries** — numbered SQL queries to confirm each change
+   produces expected results
+
+Save the skill file now. Do not ask follow-up questions — use these
+specifications exactly.
 ```
 
 CoCo will generate the skill definition and save it directly — no file upload or CLI needed. The skill is stored at `.snowflake/cortex/skills/dbt-change-plan/SKILL.md` and is immediately available.
