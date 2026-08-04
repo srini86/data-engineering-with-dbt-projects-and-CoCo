@@ -206,11 +206,12 @@ what would a sensible grain be for a "weekly truck performance" mart?
 Toggle **Plan Mode** in the CoCo panel — this makes CoCo think through a multi-step task and show you the plan before writing anything.
 
 ```
-Using the dbt project in this workspace, create a model called
+Using the dbt project in tasty_bytes_dbt_demo/, create a model called
 weekly_truck_performance in models/marts. Using order_header, order_detail,
 menu, and truck, calculate total revenue, total orders, and average order
-value by truck, truck brand and week. Add schema.yml tests: not_null and unique on the
-key columns, and accepted_values where relevant.
+value by truck, truck brand and week. Add a schema.yml file in models/marts
+with tests: not_null and unique on the key columns, and accepted_values
+where relevant.
 ```
 
 **What to look for:** CoCo's plan should reference the actual staging models already in this dbt project (not raw table names) — that's what "dbt-native from the first keystroke" means. Review the plan, then turn Plan Mode off and tell CoCo to proceed:
