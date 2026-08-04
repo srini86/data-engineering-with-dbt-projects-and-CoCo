@@ -232,13 +232,14 @@ FILE 1: tasty_bytes_dbt_demo/models/marts/weekly_truck_performance.sql
 - Materialized as table
 - Source from the existing staging models in this project (use ref(), not
   raw table names)
-- Join: orders to their line items, then to the menu for pricing, then to
-  the truck for brand info
+- Join: orders to their line items, then to the menu for pricing and
+  brand name (note: TRUCK_BRAND_NAME is on the menu table, not the truck
+  table), then to the truck for truck-level attributes
 - Group by: truck ID, truck brand name, and week (truncate the order
   timestamp to week)
 - Output columns (use these exact names):
   - TRUCK_ID
-  - TRUCK_BRAND_NAME
+  - TRUCK_BRAND_NAME (sourced from the menu table)
   - WEEK_START
   - TOTAL_REVENUE — total sales revenue for that truck and week
   - TOTAL_ORDERS — count of distinct orders
@@ -252,7 +253,8 @@ FILE 2: tasty_bytes_dbt_demo/models/marts/schema.yml
   otherwise use separate not_null + unique tests on each key column)
 
 After creating both files, run dbt deps then dbt build --select
-weekly_truck_performance.
++weekly_truck_performance (the + prefix builds upstream staging models
+that haven't been materialized yet — this is required on first run).
 If dbt deps fails (e.g., EAI/network error), skip it — comment out
 packages.yml, remove any dbt_utils macro calls from the model (use plain
 SQL equivalents like CONCAT or MD5 for surrogate keys), and run dbt build
@@ -265,7 +267,8 @@ the output table.
 
 ```
 Execute the plan now. Create both files exactly as specified, then run dbt
-deps followed by dbt build --select weekly_truck_performance.
+deps followed by dbt build --select +weekly_truck_performance (use the +
+prefix to build upstream staging dependencies).
 If dbt deps fails, skip it — comment out packages.yml, remove dbt_utils
 references from the model, and run dbt build directly. Do not retry dbt
 deps more than once.
@@ -320,30 +323,13 @@ Report build status and show 5 sample rows including the new column.
 
 CoCo in Snowsight automatically reads an `AGENTS.md` file from the root of your Workspace and applies its instructions to every conversation. This means you can encode your team's dbt modelling standards once, and CoCo will follow them by default — no need to repeat instructions in every prompt.
 
-**Create the file:**
+**Copy the file from the lab repo:**
 
-In your Workspace, create a new file called `AGENTS.md` at the root level (same directory as `README.md`). Paste the following content:
-
-```markdown
-# dbt Modelling Standards
-
-## Required for all models
-- Always set materialization explicitly in the model config block
-- Add `_loaded_at` timestamp column using `{{ dbt.current_timestamp() }}` to every staging model
-- Every primary key must have `not_null` + `unique` tests in schema.yml
-- Use `{{ ref() }}` for all model references — never hardcode table names
-- Use `{{ source() }}` for raw tables
-
-## Naming Conventions
-- Staging models: `stg_<source>__<entity>`
-- Surrogate keys: `<model_name>_key` using `{{ dbt_utils.generate_surrogate_key() }}`
-
-## Incremental Models
-- Must include `unique_key`, `on_schema_change='append_new_columns'`, and `merge_exclude_columns=['_loaded_at']`
-- Use `{% if is_incremental() %}` with an ingestion-timestamp filter where available
-```
-
-> **Note:** A more comprehensive version of this file is available in the lab GitHub repo under `assets/AGENTS.md`. For this lab, the shorter version above is enough to demonstrate the feature.
+1. In the Workspaces dropdown (top left), switch to the **github-instructions** workspace
+2. In the file tree, find `assets/AGENTS.md`
+3. Click the **...** menu next to `AGENTS.md` → select **Copy to**
+4. In the dialog, select the **dbt-project** workspace root (not a subfolder) → click **Copy to destination**
+5. Switch back to the **dbt-project** workspace and confirm `AGENTS.md` appears at the root level
 
 **Ask CoCo to improve your existing model:**
 
