@@ -531,45 +531,15 @@ The core lab ends at Module 04. Everything below is optional — for teams with 
 
 ## Module 05 (Optional): Semantic Layer on dbt Outputs
 
-**Business Context:** `weekly_truck_performance` is now tested and trustworthy. The next question analysts ask is "can I just ask it a question in plain English?" — that's what a semantic layer is for.
+**Business Context:** `weekly_truck_performance` is now tested and trustworthy. The next step is making it consumable as a governed semantic layer — so analysts and AI agents can query it with shared metric definitions rather than each tool re-implementing its own logic.
 
-### Path 1: Quick — Ask CoCo Directly
+> **Prerequisite:** This module requires the External Access Integration (`DBT_DEPS_EAI`) to be active, as `dbt deps` needs to download the `dbt_semantic_view` package. If you completed Module 01's setup script, you're already good.
 
-CoCo has a bundled `semantic-view` skill. Use it straight against the mart table:
+### Step 1: Add the dbt_semantic_view Package
 
-```
-/semantic-view
+Snowflake's [best practices for dbt Projects](https://docs.snowflake.com/en/user-guide/data-engineering/dbt-projects-on-snowflake-best-practices) recommend defining semantic views **inside your dbt project** using the [`Snowflake-Labs/dbt_semantic_view`](https://hub.getdbt.com/Snowflake-Labs/dbt_semantic_view/latest/) package. This gets your semantic layer the same governance Module 03 gave your model: version-controlled in Git, reviewed in the same PR process, reproducible across dev/staging/prod.
 
-Create a semantic view with these specifications:
-- Name: NZBANK_HOL.DEV.SV_TRUCK_PERFORMANCE
-- Base table: NZBANK_HOL.DEV.WEEKLY_TRUCK_PERFORMANCE
-- Time dimension: WEEK_START (granularities: week, month, quarter)
-- Dimensions: TRUCK_ID (number), TRUCK_BRAND_NAME (string)
-- Metrics:
-  - total_revenue: sum of weekly revenue, description "Total revenue across
-    selected period"
-  - total_orders: sum of weekly orders, description "Total order count
-    across selected period"
-  - avg_order_value: average of the per-week averages, description "Average
-    order value"
-  - profit_margin: average of weekly margins, description "Average profit
-    margin (0-1)"
-
-Show me the complete DDL before executing it. Do not execute until I
-confirm.
-```
-
-Validate it with a natural-language question via Cortex Analyst:
-
-```
-Ask Cortex Analyst: "Which truck brand had the highest profit margin last month?"
-```
-
-**What to look for:** CoCo should propose sensible metric definitions (e.g. `SUM(total_revenue)`, not just exposing the raw column) and ask about grain/time-dimension assumptions before finalizing — that's the same review discipline as Module 02's model generation.
-
-### Path 2: Production — Codify It in dbt
-
-Snowflake's [best practices for dbt Projects](https://docs.snowflake.com/en/user-guide/data-engineering/dbt-projects-on-snowflake-best-practices) recommend defining semantic views **inside your dbt project** rather than creating them manually, using the [`Snowflake-Labs/dbt_semantic_view`](https://hub.getdbt.com/Snowflake-Labs/dbt_semantic_view/latest/) package. This gets your semantic layer the same governance Module 03 gave your model: version-controlled in Git, reviewed in the same PR process, reproducible across dev/staging/prod.
+Ask CoCo to set it up:
 
 ```
 /dbt-projects-on-snowflake
@@ -580,26 +550,41 @@ Do the following steps in order:
    tasty_bytes_dbt_demo/packages.yml (latest compatible version)
 2. Run dbt deps
 3. Create file: tasty_bytes_dbt_demo/models/marts/semantic_truck_performance.sql
-   - Use materialized='semantic_view' config
-   - Wrap weekly_truck_performance with:
-     - Time dimension: WEEK_START (granularities: week, month, quarter)
-     - Dimensions: TRUCK_ID, TRUCK_BRAND_NAME
-     - Metrics: total_revenue (sum), total_orders (sum), avg_order_value
-       (average), profit_margin (average)
-   - Use the dbt_semantic_view package's Jinja syntax
+   - Use materialized='semantic_view' config from the dbt_semantic_view package
+   - The semantic view uses DDL syntax (CREATE SEMANTIC VIEW), NOT YAML.
+     In DDL, time dimensions are defined as regular dimensions — there is
+     no separate TIME DIMENSION clause. Cortex Analyst infers time nature
+     from the data type.
+   - Base table: {{ ref('weekly_truck_performance') }}
+   - Dimensions:
+     - WEEK_START (type: timestamp, time_granularity: week)
+     - TRUCK_ID (type: number)
+     - TRUCK_BRAND_NAME (type: varchar)
+   - Metrics:
+     - total_revenue: aggregate expression SUM(TOTAL_REVENUE)
+     - total_orders: aggregate expression SUM(TOTAL_ORDERS)
+     - avg_order_value: aggregate expression AVG(AVG_ORDER_VALUE)
+     - profit_margin: aggregate expression AVG(PROFIT_MARGIN)
+   - Use the dbt_semantic_view package's Jinja macros to generate the DDL
 4. Run dbt build --select semantic_truck_performance
 5. Report build status
 ```
 
-**What to look for:** the semantic view now lives as a `.sql` file in your dbt project — the same `dbt build`/deploy/CI-CD story from Module 03 applies to it.
+### Step 2: Verify
 
-### Customer Q&A
+Once the build succeeds, confirm the semantic view exists:
 
-**Q: Which path should we actually use?**
-A: Path 1 (ad hoc) for exploration and one-off analyst requests. Path 2 (codified in dbt) once the semantic view needs to survive your normal change-review process — which, for anything reaching production, is almost always the answer.
+```sql
+SHOW SEMANTIC VIEWS IN SCHEMA NZBANK_HOL.DEV;
+```
 
-**Q: Does this replace our BI tool's semantic layer?**
-A: It gives every consumer (Cortex Analyst, Cortex Agents, and — depending on your BI tool — direct integrations) one shared, governed definition instead of each tool re-implementing its own metric logic.
+**What to look for:** The semantic view now lives as a `.sql` file in your dbt project — the same `dbt build`/deploy/CI/CD story from Module 03 applies to it. When you next deploy, the semantic view deploys alongside your models as a single versioned unit.
+
+### Why This Matters
+
+- **One definition, many consumers.** Cortex Analyst, Cortex Agents, BI tools — all use the same metric definitions rather than each re-implementing the logic.
+- **Governed like code.** The semantic view is version-controlled, reviewed in PRs, and deployed through CI/CD. No manual DDL in a worksheet.
+- **Deployed together.** Because it's a dbt model, it travels with your project — deploy once, and both the table and its semantic layer are updated atomically.
 
 ---
 
@@ -679,6 +664,7 @@ A short, read-only round-up — not a hands-on exercise — for engineers who wa
 | **CI/CD with GitHub Actions / GitLab / Azure DevOps** | Official tutorial for gating every `snow dbt deploy`/`execute` behind a PR, using OIDC (no long-lived credentials) | This is the real next step after Module 03 — it's the actual mechanism for turning your AWS-CodePipeline mapping into an automated pipeline. See [Tutorial: Set up CI/CD integrations on dbt Projects on Snowflake](https://docs.snowflake.com/en/user-guide/tutorials/dbt-projects-on-snowflake-ci-cd-tutorial). |
 | **Replication of dbt project objects** | Versioned `DBT PROJECT` objects can replicate to failover accounts | Relevant to disaster-recovery planning. |
 | **`dbt docs generate` / `dbt retry`** | Newer supported commands since GA | Useful once you're maintaining docs and debugging partial failures at scale. |
+| **Environment variables (`env.yml`) & private Git packages** | GA July 2026 — define per-developer schemas, SQL-computed values, secrets, and multiple environments in a Git-versioned `env.yml` that Snowflake resolves before each run. Also enables `dbt deps` against private Git repos via Snowflake secrets. | Eliminates hard-coded `generate_schema_name` hacks and makes multi-env (dev/staging/prod) trivial. See [release notes](https://docs.snowflake.com/en/release-notes/2026/other/2026-07-23-dbt-projects-on-snowflake-environment-variables) and [full docs](https://docs.snowflake.com/user-guide/data-engineering/dbt-projects-on-snowflake-environment-variables). |
 | **Recent improvements (release notes)** | Ongoing changelog for the feature | See [dbt Projects on Snowflake: Recent improvements](https://docs.snowflake.com/en/release-notes/2025/other/2025-10-09-dbt-projects-on-snowflake-updates) for what's shipped since. |
 
 ---
@@ -715,7 +701,8 @@ data-engineering-with-dbt-projects-and-CoCo/
 - [Snowflake-Labs/getting-started-with-dbt-on-snowflake](https://github.com/Snowflake-Labs/getting-started-with-dbt-on-snowflake) — the dbt project pulled into your Workspace in Module 01
 - [Best practices for dbt Projects on Snowflake](https://docs.snowflake.com/en/user-guide/data-engineering/dbt-projects-on-snowflake-best-practices) — source for Module 05's semantic-view-in-dbt guidance and Module 07's CI/CD pointer
 - [Best practices for semantic views](https://docs.snowflake.com/en/user-guide/views-semantic/best-practices-dev) — Module 05
-- [Snowflake-Labs/dbt_semantic_view package](https://hub.getdbt.com/Snowflake-Labs/dbt_semantic_view/latest/) — Module 05, Path 2
+- [Snowflake-Labs/dbt_semantic_view package](https://hub.getdbt.com/Snowflake-Labs/dbt_semantic_view/latest/) — Module 05
 - [Tutorial: Set up CI/CD integrations on dbt Projects on Snowflake](https://docs.snowflake.com/en/user-guide/tutorials/dbt-projects-on-snowflake-ci-cd-tutorial) — Module 07
 - [Migrate to dbt Fusion](https://docs.snowflake.com/en/user-guide/data-engineering/dbt-projects-on-snowflake-dbt-core-versions#migrate-to-dbt-fusion) — Module 07
 - [dbt Projects on Snowflake: Recent improvements (release notes)](https://docs.snowflake.com/en/release-notes/2025/other/2025-10-09-dbt-projects-on-snowflake-updates) — Module 07
+- [Environment variables & private Git packages (GA July 2026)](https://docs.snowflake.com/en/release-notes/2026/other/2026-07-23-dbt-projects-on-snowflake-environment-variables) — Module 07
